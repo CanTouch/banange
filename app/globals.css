@@ -1,26 +1,146 @@
 @import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #0B1020;
+  --surface: #121A30;
+  --surface-2: #1A2442;
+  --text: #E8ECF5;
+  --muted: #8A94AD;
+  --border: #26325A;
+  --out: #FF4D4D;
+  --out-glow: rgba(255, 77, 77, 0.35);
+  --back: #FFB020;
+  --back-glow: rgba(255, 176, 32, 0.35);
+  --focus: #7CC4FF;
+  --btn-text: #0B1020;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+[data-theme="light"] {
+  --bg: #F7F4EE;
+  --surface: #FFFFFF;
+  --surface-2: #EFEAE0;
+  --text: #14182B;
+  --muted: #5A6275;
+  --border: #D9D2C3;
+  --out: #D92D2D;
+  --out-glow: rgba(217, 45, 45, 0.25);
+  --back: #E08A00;
+  --back-glow: rgba(224, 138, 0, 0.25);
+  --focus: #0A6CC4;
+  --btn-text: #FFFFFF;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body), system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1, h2, h3, .font-heading {
+  font-family: var(--font-heading), system-ui, -apple-system, sans-serif;
+}
+
+/* Animations */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(0.85);
+    opacity: 0.9;
+  }
+}
+
+@keyframes pop-in {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes amber-bloom {
+  0% {
+    transform: scale(0.1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 2.4s ease-in-out infinite;
+}
+
+.animate-pop-in {
+  animation: pop-in 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.animate-bloom {
+  animation: amber-bloom 0.7s ease-out forwards;
+}
+
+/* Maplibre overrides */
+.maplibregl-ctrl-attrib {
+  background-color: var(--surface) !important;
+  color: var(--muted) !important;
+  font-size: 11px !important;
+  border-radius: 6px !important;
+  padding: 2px 6px !important;
+  margin: 6px !important;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--text) !important;
+  text-decoration: none !important;
+}
+
+.maplibregl-popup-content {
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+  padding: 12px 14px !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4) !important;
+}
+
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+  border-top-color: var(--surface) !important;
+}
+
+.maplibregl-popup-anchor-top .maplibregl-popup-tip {
+  border-bottom-color: var(--surface) !important;
+}
+
+.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--surface) !important;
+}
+
+.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--surface) !important;
+}
+
+.maplibregl-popup-close-button {
+  color: var(--muted) !important;
+  font-size: 16px !important;
+  padding: 4px 8px !important;
 }
