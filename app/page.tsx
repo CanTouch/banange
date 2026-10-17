@@ -4,7 +4,11 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { I18nProvider, useI18n } from '@/lib/i18n';
 import { LiteModeProvider } from '@/lib/liteMode';
 import { TopBar } from '@/components/TopBar';
-import { MapView } from '@/components/MapView';
+import dynamic from 'next/dynamic';
+
+const MapView = dynamic(() => import('@/components/MapView').then((mod) => mod.MapView), {
+  ssr: false,
+});
 import { ReportButtons } from '@/components/ReportButtons';
 import { BackPrompt } from '@/components/BackPrompt';
 import { AreaSheet, AreaOutageItem, WeeklyAreaStat } from '@/components/AreaSheet';

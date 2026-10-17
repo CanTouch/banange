@@ -199,6 +199,13 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
     let isSubscribed = true;
 
     async function init() {
+      // Ensure worker URL is set to CSP worker in public directory
+      if (typeof maplibregl.setWorkerUrl === 'function') {
+        maplibregl.setWorkerUrl('/maplibre-gl-csp-worker.js');
+      } else if ('workerUrl' in (maplibregl as Record<string, unknown>)) {
+        (maplibregl as Record<string, unknown>).workerUrl = '/maplibre-gl-csp-worker.js';
+      }
+
       const base = await fetchBaseStyle();
       if (!isSubscribed || !mapContainerRef.current) return;
 

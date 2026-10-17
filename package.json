@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "postinstall": "node scripts/copy-worker.mjs",
     "build:areas": "node scripts/build-areas.mjs",
     "make:images": "node scripts/make-images.mjs"
   },

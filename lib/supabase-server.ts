@@ -10,8 +10,11 @@ export function getSupabaseServerClient(): SupabaseClient | null {
     return null;
   }
 
+  // Strip trailing /rest/v1/ or trailing slashes if present
+  const cleanUrl = url.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+
   if (!client) {
-    client = createClient(url, key, {
+    client = createClient(cleanUrl, key, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
