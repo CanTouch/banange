@@ -133,9 +133,8 @@ export class SupabaseStore implements ReportStore {
     const supabase = getSupabaseServerClient();
     if (!supabase) throw new Error('Supabase client not available');
 
-    const { error } = await supabase.from('reports').insert({
-      id: r.id,
-      created_at: r.created_at,
+    const payload: Record<string, unknown> = {
+      created_at: r.created_at || new Date().toISOString(),
       kind: r.kind,
       cell_id: r.cell_id,
       cell_lat: r.cell_lat,
@@ -144,7 +143,12 @@ export class SupabaseStore implements ReportStore {
       area_name: r.area_name ?? null,
       device_hash: r.device_hash,
       flagged: r.flagged ?? false,
-    });
+    };
+    if (r.id) {
+      payload.id = r.id;
+    }
+
+    const { error } = await supabase.from('reports').insert(payload);
 
     if (error) throw error;
   }
