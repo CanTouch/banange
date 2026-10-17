@@ -10,7 +10,9 @@ Production URL: [https://banange.kuppelabs.com](https://banange.kuppelabs.com)
 ## Quick Start
 
 ### 1. Run in DEV MODE (zero setup)
-If `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is not provided, Banange automatically runs in **DEV MODE** using an in-memory store and displays a visible `DEV MODE` badge.
+When `NODE_ENV` is not `"production"`, if `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is not provided, Banange automatically runs in **DEV MODE** using an in-memory store and displays a visible `DEV MODE` badge.
+
+In production (`NODE_ENV === "production"`), the app strictly requires Supabase credentials: if missing, `/api/report` and `/api/map` return HTTP 500 with a clear error and the UI displays an error banner, never falling back to memory.
 
 ```bash
 npm run dev

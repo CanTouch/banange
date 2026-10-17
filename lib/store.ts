@@ -226,12 +226,26 @@ export class SupabaseStore implements ReportStore {
 }
 
 export function isDevMode(): boolean {
-  return !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return (
+    process.env.NODE_ENV !== 'production' &&
+    (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY)
+  );
+}
+
+export function isProductionMissingConfig(): boolean {
+  return (
+    process.env.NODE_ENV === 'production' &&
+    (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY)
+  );
 }
 
 let storeInstance: ReportStore | null = null;
 
 export function getStore(): ReportStore {
+  if (isProductionMissingConfig()) {
+    throw new Error('Database misconfigured: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production.');
+  }
+
   if (!storeInstance) {
     if (isDevMode()) {
       storeInstance = new MemoryStore();

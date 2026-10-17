@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getStore, isDevMode } from '@/lib/store';
+import { getStore, isDevMode, isProductionMissingConfig } from '@/lib/store';
 import { computeState } from '@/lib/states';
 import { parseCell } from '@/lib/cells';
 import { GRID_SIZE_DEG } from '@/lib/constants';
@@ -9,6 +9,16 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    if (isProductionMissingConfig()) {
+      return NextResponse.json(
+        {
+          error: 'server_misconfigured',
+          message: 'Database misconfigured: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production.',
+        },
+        { status: 500 }
+      );
+    }
+
     const store = getStore();
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();

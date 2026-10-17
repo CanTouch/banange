@@ -25,6 +25,7 @@ function BanangeApp() {
   const [isDev, setIsDev] = useState(false);
   const [totals, setTotals] = useState<{ dark_now: number; confirmed_now: number } | null>(null);
   const [apiFailed, setApiFailed] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Modals & Overlays
   const [isAboutOpen, setIsAboutOpen] = useState(false);
@@ -50,15 +51,21 @@ function BanangeApp() {
   const fetchMapData = useCallback(async () => {
     try {
       const res = await fetch('/api/map');
-      if (!res.ok) throw new Error('Failed to fetch map data');
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || 'Failed to fetch map data');
+      }
       const data = await res.json();
       setCells(data.cells || []);
       setWeeklyStats(data.areas || []);
       setTotals(data.totals || { dark_now: 0, confirmed_now: 0 });
       setIsDev(Boolean(data.dev_mode));
+      setErrorMessage(null);
       setApiFailed(false);
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unable to connect to outage database';
       setApiFailed(true);
+      setErrorMessage(msg);
     }
   }, []);
 
@@ -248,6 +255,26 @@ function BanangeApp() {
     <main className="relative w-screen h-screen overflow-hidden flex flex-col bg-[var(--bg)] text-[var(--text)] select-none">
       {/* Top Bar */}
       <TopBar isDev={isDev} onOpenAbout={() => setIsAboutOpen(true)} />
+
+      {/* Production / Database Error Banner */}
+      {errorMessage && (
+        <aside
+          role="alert"
+          aria-label="Database error notification"
+          className="absolute top-16 left-4 right-4 z-40 mx-auto max-w-lg p-3.5 rounded-2xl bg-red-950/90 border border-red-500/80 shadow-2xl backdrop-blur-md text-red-200 text-xs font-semibold flex items-center justify-between gap-3 animate-pop-in pointer-events-auto"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            onClick={() => fetchMapData()}
+            className="px-2.5 py-1 rounded-lg bg-red-900 border border-red-700 text-red-100 hover:bg-red-800 text-[11px] font-bold shrink-0 cursor-pointer"
+          >
+            Retry
+          </button>
+        </aside>
+      )}
 
       {/* Stats Chip under Top Bar */}
       {!apiFailed && totals !== null && (

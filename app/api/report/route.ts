@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { DAILY_LIMIT, RATE_LIMIT_MINUTES, UGANDA_BOUNDS } from '@/lib/constants';
 import { latLngToCell } from '@/lib/cells';
 import { hashDeviceId } from '@/lib/device';
-import { getStore } from '@/lib/store';
+import { getStore, isProductionMissingConfig } from '@/lib/store';
 import { getAreas } from '@/lib/areas';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 
@@ -21,6 +21,16 @@ const reportSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    if (isProductionMissingConfig()) {
+      return NextResponse.json(
+        {
+          error: 'server_misconfigured',
+          message: 'Database misconfigured: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production.',
+        },
+        { status: 500 }
+      );
+    }
+
     const json = await req.json();
     const parsed = reportSchema.safeParse(json);
 

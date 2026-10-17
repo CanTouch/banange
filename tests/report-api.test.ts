@@ -127,4 +127,59 @@ describe('POST /api/report handler', () => {
     const reports = await store.reportsSince('1970-01-01');
     expect(reports.length).toBe(0);
   });
+
+  it('in production with missing Supabase keys -> 500 server_misconfigured', async () => {
+    const origEnv = process.env.NODE_ENV;
+    const origUrl = process.env.SUPABASE_URL;
+    const origKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    try {
+      // Set to production without keys
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+      delete process.env.SUPABASE_URL;
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      const devId = crypto.randomUUID();
+      const req = makeRequest({
+        kind: 'out',
+        lat: 0.3536,
+        lng: 32.6128,
+        loc_precision: 'gps',
+        device_id: devId,
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(500);
+      const data = await res.json();
+      expect(data.error).toBe('server_misconfigured');
+      expect(data.message).toContain('Database misconfigured');
+    } finally {
+      (process.env as Record<string, string | undefined>).NODE_ENV = origEnv;
+      if (origUrl) process.env.SUPABASE_URL = origUrl;
+      if (origKey) process.env.SUPABASE_SERVICE_ROLE_KEY = origKey;
+    }
+  });
+
+  it('GET /api/map in production with missing Supabase keys -> 500 server_misconfigured', async () => {
+    const { GET } = await import('../app/api/map/route');
+    const origEnv = process.env.NODE_ENV;
+    const origUrl = process.env.SUPABASE_URL;
+    const origKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    try {
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+      delete process.env.SUPABASE_URL;
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      const res = await GET();
+      expect(res.status).toBe(500);
+      const data = await res.json();
+      expect(data.error).toBe('server_misconfigured');
+      expect(data.message).toContain('Database misconfigured');
+    } finally {
+      (process.env as Record<string, string | undefined>).NODE_ENV = origEnv;
+      if (origUrl) process.env.SUPABASE_URL = origUrl;
+      if (origKey) process.env.SUPABASE_SERVICE_ROLE_KEY = origKey;
+    }
+  });
 });
