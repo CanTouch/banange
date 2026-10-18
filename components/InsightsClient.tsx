@@ -19,31 +19,41 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
   } | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const bubbleContainerRef = useRef<HTMLDivElement | null>(null);
-  const [bubbleChartWidth, setBubbleChartWidth] = useState<number>(800);
+  const [bubbleChartWidth, setBubbleChartWidth] = useState<number | null>(null);
+  const containerElRef = useRef<HTMLDivElement | null>(null);
+
+  const bubbleContainerRef = useCallback((el: HTMLDivElement | null) => {
+    containerElRef.current = el;
+    if (!el) return;
+    const update = () => {
+      const w = Math.round(el.getBoundingClientRect().width);
+      if (w > 0) {
+        setBubbleChartWidth(w);
+      }
+    };
+    update();
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = Math.round(entry.contentRect.width);
+        if (w > 0) {
+          setBubbleChartWidth(w);
+        }
+      }
+    });
+    observer.observe(el);
+  }, []);
 
   useEffect(() => {
-    const el = bubbleContainerRef.current;
-    if (!el) return;
-
-    const updateWidth = () => {
-      if (el) {
-        const w = el.getBoundingClientRect().width;
+    const handleResize = () => {
+      if (containerElRef.current) {
+        const w = Math.round(containerElRef.current.getBoundingClientRect().width);
         if (w > 0) setBubbleChartWidth(w);
       }
     };
-
-    updateWidth();
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const w = entry.contentRect.width;
-        if (w > 0) setBubbleChartWidth(w);
-      }
-    });
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [data]);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchInsights = useCallback(async (selectedDays: 7 | 30) => {
     if (initialData && initialData.range_days === selectedDays && data === initialData) {
