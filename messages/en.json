@@ -41,5 +41,7 @@
   "dot_power_back": "Power back at {time}",
   "week_stat_row": "{name}: {episodes} outages, about {hours} h dark (est.)",
   "since_label": "since {time}",
-  "close": "Close"
+  "close": "Close",
+  "btn_send": "Send",
+  "btn_checking": "Checking…"
 }

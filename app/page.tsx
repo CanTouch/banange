@@ -82,74 +82,16 @@ function BanangeApp() {
   // Map Navigation
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number; zoom?: number; timestamp: number } | null>(null);
 
+  // Picker coords and Turnstile reset signal
+  const [pickerInitialCoords, setPickerInitialCoords] = useState<{ lat: number; lng: number } | undefined>(undefined);
+  const [pickerInitialPrecision, setPickerInitialPrecision] = useState<'gps' | 'pin' | 'area'>('pin');
+  const [turnstileResetSignal, setTurnstileResetSignal] = useState(0);
+
   const showToast = useCallback((msg: string, code?: string) => {
     setToast({ message: msg, code });
     setTimeout(() => {
       setToast(null);
     }, 4500);
-  }, []);
-
-  // Cloudflare Turnstile token management
-  const turnstileTokenRef = useRef<string | null>(null);
-  const turnstileWidgetIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
-    if (!siteKey || typeof window === 'undefined') return;
-
-    const renderTurnstile = () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const win = window as any;
-      if (!win.turnstile || turnstileWidgetIdRef.current) return;
-      const container = document.getElementById('turnstile-container');
-      if (!container) return;
-
-      try {
-        const id = win.turnstile.render('#turnstile-container', {
-          sitekey: siteKey,
-          size: 'invisible',
-          callback: (token: string) => {
-            turnstileTokenRef.current = token;
-          },
-          'expired-callback': () => {
-            turnstileTokenRef.current = null;
-            if (turnstileWidgetIdRef.current) {
-              win.turnstile?.reset(turnstileWidgetIdRef.current);
-            }
-          },
-          'error-callback': () => {
-            turnstileTokenRef.current = null;
-          },
-        });
-        turnstileWidgetIdRef.current = id;
-      } catch {
-        // ignore
-      }
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).turnstile) {
-      renderTurnstile();
-    } else {
-      const existingScript = document.querySelector('script[src*="turnstile/v0/api.js"]');
-      if (!existingScript) {
-        const script = document.createElement('script');
-        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-        script.async = true;
-        script.defer = true;
-        script.onload = () => renderTurnstile();
-        document.head.appendChild(script);
-      } else {
-        const interval = setInterval(() => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          if ((window as any).turnstile) {
-            clearInterval(interval);
-            renderTurnstile();
-          }
-        }, 200);
-        return () => clearInterval(interval);
-      }
-    }
   }, []);
 
   // Fetch live map data
@@ -214,19 +156,18 @@ function BanangeApp() {
       lng: number;
       loc_precision: 'gps' | 'pin' | 'area';
       area_name?: string;
+      turnstile_token?: string;
     }) => {
       setIsReporting(true);
       const deviceId = getClientDeviceId();
-
-      const token = turnstileTokenRef.current;
 
       const body: Record<string, unknown> = {
         ...payload,
         device_id: deviceId,
       };
 
-      if (token) {
-        body.turnstile_token = token;
+      if (payload.turnstile_token) {
+        body.turnstile_token = payload.turnstile_token;
       }
 
       try {
@@ -238,6 +179,9 @@ function BanangeApp() {
 
         if (res.ok) {
           const data = await res.json();
+          setIsPickerOpen(false);
+          setPendingReportKind(null);
+
           if (payload.kind === 'out') {
             try {
               localStorage.setItem(
@@ -297,68 +241,59 @@ function BanangeApp() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         enqueueReport(body as any);
         showToast(t('offline_saved'), 'OFFLINE');
+        setIsPickerOpen(false);
+        setPendingReportKind(null);
       } finally {
         setIsReporting(false);
-        // Reset turnstile widget for next submission
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const win = typeof window !== 'undefined' ? (window as any) : null;
-        if (win?.turnstile && turnstileWidgetIdRef.current) {
-          try {
-            win.turnstile.reset(turnstileWidgetIdRef.current);
-            turnstileTokenRef.current = null;
-          } catch {
-            // ignore
-          }
-        }
+        // Reset turnstile widget signal after every report
+        setTurnstileResetSignal((s) => s + 1);
       }
     },
     [fetchMapData, showToast, t]
   );
 
   const handleReportClick = (kind: 'out' | 'back') => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setPendingReportKind(kind);
-      setIsPickerOpen(true);
-      return;
-    }
+    setPendingReportKind(kind);
+    setPickerInitialPrecision('pin');
+    setIsPickerOpen(true);
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        submitReport({
-          kind,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          loc_precision: 'gps',
-        });
-      },
-      () => {
-        setPendingReportKind(kind);
-        setIsPickerOpen(true);
-      },
-      {
-        timeout: 8000,
-        enableHighAccuracy: false,
-        maximumAge: 60000,
-      }
-    );
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setPickerInitialCoords({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          });
+          setPickerInitialPrecision('gps');
+        },
+        () => {
+          // If geolocation is denied or timed out, user can still pin/search in the sheet
+        },
+        {
+          timeout: 8000,
+          enableHighAccuracy: false,
+          maximumAge: 60000,
+        }
+      );
+    }
   };
 
   const handlePickerConfirm = (loc: {
     lat: number;
     lng: number;
-    loc_precision: 'pin' | 'area';
+    loc_precision: 'gps' | 'pin' | 'area';
     area_name?: string;
+    turnstile_token?: string;
   }) => {
     if (!pendingReportKind) return;
-    setIsPickerOpen(false);
     submitReport({
       kind: pendingReportKind,
       lat: loc.lat,
       lng: loc.lng,
       loc_precision: loc.loc_precision,
       area_name: loc.area_name,
+      turnstile_token: loc.turnstile_token,
     });
-    setPendingReportKind(null);
   };
 
   const handleBackPromptConfirm = (saved: {
@@ -366,12 +301,10 @@ function BanangeApp() {
     lng: number;
     loc_precision: 'gps' | 'pin' | 'area';
   }) => {
-    submitReport({
-      kind: 'back',
-      lat: saved.lat,
-      lng: saved.lng,
-      loc_precision: saved.loc_precision,
-    });
+    setPendingReportKind('back');
+    setPickerInitialCoords({ lat: saved.lat, lng: saved.lng });
+    setPickerInitialPrecision(saved.loc_precision);
+    setIsPickerOpen(true);
   };
 
   const displayedCells = historicalCells !== null ? historicalCells : cells;
@@ -445,7 +378,7 @@ function BanangeApp() {
       {toast && (
         <div
           role="alert"
-          className="absolute top-28 left-4 right-4 z-50 mx-auto max-w-sm p-3.5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-2xl backdrop-blur-md text-center text-xs font-medium text-[var(--ink)] animate-pop-in flex flex-col items-center gap-1 pointer-events-auto"
+          className="absolute top-28 left-4 right-4 z-[60] mx-auto max-w-sm p-3.5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-2xl backdrop-blur-md text-center text-xs font-medium text-[var(--ink)] animate-pop-in flex flex-col items-center gap-1 pointer-events-auto"
         >
           <span>{toast.message}</span>
           {toast.code && (
@@ -455,9 +388,6 @@ function BanangeApp() {
           )}
         </div>
       )}
-
-      {/* Cloudflare Turnstile Invisible Container */}
-      <div id="turnstile-container" className="fixed -bottom-96 -left-96 pointer-events-none opacity-0" aria-hidden="true" />
 
       {/* Map View */}
       <MapView cells={displayedCells} flyToLocation={flyTo} />
@@ -507,6 +437,12 @@ function BanangeApp() {
       {/* Location Picker Sheet */}
       <LocationPicker
         isOpen={isPickerOpen}
+        kind={pendingReportKind}
+        initialCoords={pickerInitialCoords}
+        initialPrecision={pickerInitialPrecision}
+        isSubmitting={isReporting}
+        resetSignal={turnstileResetSignal}
+        onTurnstileError={(code) => showToast(t('err_check_failed'), code)}
         onClose={() => {
           setIsPickerOpen(false);
           setPendingReportKind(null);

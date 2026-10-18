@@ -41,5 +41,7 @@
   "dot_power_back": "Gazze ku {time}",
   "week_stat_row": "{name}: okubula {episodes}, essaawa nga {hours} mu kizikiza",
   "since_label": "okuva {time}",
-  "close": "Ggalawo"
+  "close": "Ggalawo",
+  "btn_send": "Sindika",
+  "btn_checking": "Kikebera…"
 }

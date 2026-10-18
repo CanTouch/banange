@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { useI18n } from '@/lib/i18n';
 import { UGANDA_CENTER } from '@/lib/constants';
 import { fetchBaseStyle, transformStyle } from '@/lib/mapStyle';
+import { createTurnstileCallbacks } from '@/lib/turnstileClient';
 
 interface LocationPickerProps {
   isOpen: boolean;
@@ -12,10 +13,16 @@ interface LocationPickerProps {
   onConfirm: (location: {
     lat: number;
     lng: number;
-    loc_precision: 'pin' | 'area';
+    loc_precision: 'gps' | 'pin' | 'area';
     area_name?: string;
+    turnstile_token?: string;
   }) => void;
   initialCoords?: { lat: number; lng: number };
+  initialPrecision?: 'gps' | 'pin' | 'area';
+  kind?: 'out' | 'back' | null;
+  isSubmitting?: boolean;
+  resetSignal?: number;
+  onTurnstileError?: (code: string) => void;
 }
 
 interface AreaResult {
@@ -29,10 +36,15 @@ export function LocationPicker({
   onClose,
   onConfirm,
   initialCoords = UGANDA_CENTER,
+  initialPrecision = 'pin',
+  kind = 'out',
+  isSubmitting = false,
+  resetSignal = 0,
+  onTurnstileError,
 }: LocationPickerProps) {
   const { t } = useI18n();
   const [coords, setCoords] = useState(initialCoords);
-  const [precision, setPrecision] = useState<'pin' | 'area'>('pin');
+  const [precision, setPrecision] = useState<'gps' | 'pin' | 'area'>(initialPrecision);
   const [selectedArea, setSelectedArea] = useState<string>('');
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<AreaResult[]>([]);
@@ -139,6 +151,156 @@ export function LocationPicker({
     };
   }, [isOpen]);
 
+  const turnstileContainerRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+
+  const siteKey = typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY : undefined;
+  const isTurnstileConfigured = Boolean(siteKey);
+
+  const resetTurnstile = useCallback(() => {
+    setTurnstileToken(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    if (win?.turnstile && widgetIdRef.current) {
+      try {
+        win.turnstile.reset(widgetIdRef.current);
+      } catch (err) {
+        console.error('Turnstile reset error:', err);
+      }
+    }
+  }, []);
+
+  // Sync coords and precision when isOpen or initialCoords changes
+  useEffect(() => {
+    if (isOpen) {
+      setCoords(initialCoords);
+      setPrecision(initialPrecision);
+      setSelectedArea('');
+      setQuery('');
+      setSuggestions([]);
+      if (markerRef.current) {
+        markerRef.current.setLngLat([initialCoords.lng, initialCoords.lat]);
+      }
+      if (mapRef.current) {
+        mapRef.current.setCenter([initialCoords.lng, initialCoords.lat]);
+      }
+    }
+  }, [isOpen, initialCoords, initialPrecision]);
+
+  // Reset widget when resetSignal updates (e.g. after each report)
+  useEffect(() => {
+    if (resetSignal) {
+      resetTurnstile();
+    }
+  }, [resetSignal, resetTurnstile]);
+
+  // Clean up widget when sheet closes
+  useEffect(() => {
+    if (!isOpen) {
+      setTurnstileToken(null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const win = typeof window !== 'undefined' ? (window as any) : null;
+      if (win?.turnstile && widgetIdRef.current) {
+        try {
+          win.turnstile.remove(widgetIdRef.current);
+        } catch {
+          // ignore
+        }
+        widgetIdRef.current = null;
+      }
+    }
+  }, [isOpen]);
+
+  // Turnstile widget lifecycle
+  useEffect(() => {
+    if (!isOpen || !isTurnstileConfigured || !siteKey || typeof window === 'undefined') {
+      return;
+    }
+
+    let isMounted = true;
+
+    const renderWidget = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const win = window as any;
+      if (!isMounted || !win.turnstile || !turnstileContainerRef.current) return;
+
+      if (widgetIdRef.current) {
+        try {
+          win.turnstile.reset(widgetIdRef.current);
+          setTurnstileToken(null);
+          return;
+        } catch {
+          widgetIdRef.current = null;
+        }
+      }
+
+      try {
+        const currentTheme = (document.documentElement.getAttribute('data-theme') || 'dark') as 'dark' | 'light';
+        const callbacks = createTurnstileCallbacks({
+          setToken: (tok) => {
+            if (isMounted) setTurnstileToken(tok);
+          },
+          onToastError: (code) => {
+            if (isMounted) onTurnstileError?.(code);
+          },
+          resetWidget: () => {
+            if (widgetIdRef.current && win.turnstile) {
+              try {
+                win.turnstile.reset(widgetIdRef.current);
+              } catch (e) {
+                console.error('Turnstile reset error:', e);
+              }
+            }
+          },
+        });
+
+        const id = win.turnstile.render(turnstileContainerRef.current, {
+          sitekey: siteKey,
+          theme: currentTheme === 'light' ? 'light' : 'dark',
+          size: 'normal',
+          ...callbacks,
+        });
+        widgetIdRef.current = id;
+      } catch (err) {
+        console.error('Failed to render Turnstile widget:', err);
+      }
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).turnstile) {
+      renderWidget();
+    } else {
+      const existingScript = document.querySelector('script[src*="turnstile/v0/api.js"]');
+      if (!existingScript) {
+        const script = document.createElement('script');
+        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => {
+          if (isMounted) renderWidget();
+        };
+        document.head.appendChild(script);
+      } else {
+        const interval = setInterval(() => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if ((window as any).turnstile) {
+            clearInterval(interval);
+            if (isMounted) renderWidget();
+          }
+        }, 100);
+        return () => {
+          clearInterval(interval);
+          isMounted = false;
+        };
+      }
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, isTurnstileConfigured, siteKey, onTurnstileError]);
+
   if (!isOpen) return null;
 
   const handleSelectArea = (area: AreaResult) => {
@@ -154,12 +316,17 @@ export function LocationPicker({
     }
   };
 
+  const isChecking = isTurnstileConfigured && !turnstileToken;
+  const isSendDisabled = isSubmitting || isChecking;
+
   const handleConfirm = () => {
+    if (isSendDisabled) return;
     onConfirm({
       lat: coords.lat,
       lng: coords.lng,
       loc_precision: precision,
       area_name: selectedArea || undefined,
+      turnstile_token: turnstileToken || undefined,
     });
   };
 
@@ -170,7 +337,7 @@ export function LocationPicker({
       aria-label="Location picker"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 animate-pop-in"
     >
-      <div className="relative w-full max-w-lg bg-[var(--surface)] border border-[var(--border)] rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-lg bg-[var(--surface)] border border-[var(--border)] rounded-t-3xl sm:rounded-3xl p-4 sm:p-5 shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
           <div className="flex flex-col">
@@ -181,7 +348,7 @@ export function LocationPicker({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors"
+            className="p-1.5 rounded-xl text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
             aria-label={t('close')}
           >
             ✕
@@ -189,7 +356,7 @@ export function LocationPicker({
         </div>
 
         {/* Autocomplete Input */}
-        <div className="relative mt-4">
+        <div className="relative mt-4 shrink-0">
           <input
             type="text"
             value={query}
@@ -213,7 +380,7 @@ export function LocationPicker({
                   <button
                     type="button"
                     onClick={() => handleSelectArea(item)}
-                    className="w-full text-left px-3.5 py-2.5 text-sm text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors flex items-center justify-between"
+                    className="w-full text-left px-3.5 py-2.5 text-sm text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors flex items-center justify-between cursor-pointer"
                   >
                     <span className="font-medium">{item.name}</span>
                     <span className="text-[11px] text-[var(--muted)]">Select</span>
@@ -225,26 +392,55 @@ export function LocationPicker({
         </div>
 
         {/* Interactive mini map */}
-        <div className="relative mt-4 w-full h-56 sm:h-64 rounded-2xl overflow-hidden border border-[var(--border)]">
+        <div className="relative mt-4 w-full h-44 sm:h-56 rounded-2xl overflow-hidden border border-[var(--border)] shrink-0">
           <div ref={mapContainerRef} className="w-full h-full" />
           <div className="absolute bottom-2 left-2 right-2 px-2.5 py-1 rounded-lg bg-[var(--surface)]/90 backdrop-blur-sm border border-[var(--border)] text-[11px] text-[var(--muted)] text-center pointer-events-none">
             Drag pin or tap map to adjust
           </div>
         </div>
 
+        {/* Turnstile verification widget (visible inside confirm-location sheet, above Send button) */}
+        {isTurnstileConfigured && (
+          <div className="w-full flex flex-col items-center justify-center my-3 min-h-[65px] shrink-0">
+            <div
+              ref={turnstileContainerRef}
+              id="turnstile-widget"
+              className="flex justify-center items-center min-h-[65px] w-full max-w-[320px] overflow-hidden"
+            />
+          </div>
+        )}
+
         {/* Actions */}
-        <div className="mt-5 flex gap-3">
+        <div className="mt-3 flex gap-3 shrink-0">
           <button
+            type="button"
             onClick={onClose}
-            className="flex-1 h-12 rounded-xl border border-[var(--border)] text-[var(--muted)] font-semibold text-sm hover:bg-[var(--surface-2)] transition-colors"
+            className="flex-1 h-12 rounded-xl border border-[var(--border)] text-[var(--muted)] font-semibold text-sm hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
           >
             {t('close')}
           </button>
           <button
+            type="button"
             onClick={handleConfirm}
-            className="flex-1 h-12 rounded-xl bg-[var(--out)] text-[var(--btn-text)] font-semibold text-sm shadow-[0_0_15px_var(--out-glow)] hover:brightness-105 active:scale-[0.98] transition-all"
+            disabled={isSendDisabled}
+            className={`flex-1 h-12 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+              isSendDisabled
+                ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed opacity-60'
+                : kind === 'back'
+                ? 'bg-[var(--back)] text-white shadow-[0_0_15px_rgba(255,176,32,0.35)] hover:brightness-105 active:scale-[0.98] cursor-pointer'
+                : 'bg-[var(--out)] text-white shadow-[0_0_15px_rgba(255,75,75,0.35)] hover:brightness-105 active:scale-[0.98] cursor-pointer'
+            }`}
           >
-            {t('loc_confirm')}
+            {isSubmitting ? (
+              <span>Sending…</span>
+            ) : isChecking ? (
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-slate-400 animate-ping shrink-0" />
+                <span>{t('btn_checking') || 'Checking…'}</span>
+              </span>
+            ) : (
+              <span>{t('btn_send') || 'Send'}</span>
+            )}
           </button>
         </div>
       </div>
