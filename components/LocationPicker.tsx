@@ -153,13 +153,32 @@ export function LocationPicker({
 
   const turnstileContainerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+
+  // Token stored in one place: both ref (synchronous immediate access) and state (triggers re-render)
+  const tokenRef = useRef<string | null>(null);
+  const [turnstileToken, setTurnstileTokenState] = useState<string | null>(null);
 
   const siteKey = typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY : undefined;
   const isTurnstileConfigured = Boolean(siteKey);
 
+  // 8-second fallback timeout
+  const [isTimedOut, setIsTimedOut] = useState(false);
+  const timeoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const setToken = useCallback((tok: string | null) => {
+    tokenRef.current = tok;
+    setTurnstileTokenState(tok);
+    if (tok) {
+      setIsTimedOut(false);
+      if (timeoutTimerRef.current) {
+        clearTimeout(timeoutTimerRef.current);
+      }
+    }
+  }, []);
+
   const resetTurnstile = useCallback(() => {
-    setTurnstileToken(null);
+    setToken(null);
+    setIsTimedOut(false);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const win = typeof window !== 'undefined' ? (window as any) : null;
     if (win?.turnstile && widgetIdRef.current) {
@@ -169,7 +188,13 @@ export function LocationPicker({
         console.error('Turnstile reset error:', err);
       }
     }
-  }, []);
+  }, [setToken]);
+
+  // Keep onTurnstileError callback in a ref to prevent effect re-runs on parent re-renders
+  const onTurnstileErrorRef = useRef(onTurnstileError);
+  useEffect(() => {
+    onTurnstileErrorRef.current = onTurnstileError;
+  }, [onTurnstileError]);
 
   // Sync coords and precision when isOpen or initialCoords changes
   useEffect(() => {
@@ -188,17 +213,49 @@ export function LocationPicker({
     }
   }, [isOpen, initialCoords, initialPrecision]);
 
-  // Reset widget when resetSignal updates (e.g. after each report)
+  // Reset widget ONLY when resetSignal fires after a report was sent, NEVER on mount or on success
+  const prevResetSignalRef = useRef(resetSignal);
   useEffect(() => {
-    if (resetSignal) {
+    if (resetSignal > 0 && resetSignal !== prevResetSignalRef.current) {
+      prevResetSignalRef.current = resetSignal;
       resetTurnstile();
     }
   }, [resetSignal, resetTurnstile]);
 
+  // Start 8-second fallback timer when open
+  const startTimeoutTimer = useCallback(() => {
+    if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
+    setIsTimedOut(false);
+    if (!isTurnstileConfigured) return;
+
+    timeoutTimerRef.current = setTimeout(() => {
+      if (!tokenRef.current) {
+        setIsTimedOut(true);
+      }
+    }, 8000);
+  }, [isTurnstileConfigured]);
+
+  useEffect(() => {
+    if (isOpen) {
+      startTimeoutTimer();
+    } else {
+      if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
+      setIsTimedOut(false);
+    }
+    return () => {
+      if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
+    };
+  }, [isOpen, startTimeoutTimer]);
+
+  const handleRetry = useCallback(() => {
+    resetTurnstile();
+    startTimeoutTimer();
+  }, [resetTurnstile, startTimeoutTimer]);
+
   // Clean up widget when sheet closes
   useEffect(() => {
     if (!isOpen) {
-      setTurnstileToken(null);
+      setToken(null);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const win = typeof window !== 'undefined' ? (window as any) : null;
       if (win?.turnstile && widgetIdRef.current) {
@@ -210,9 +267,9 @@ export function LocationPicker({
         widgetIdRef.current = null;
       }
     }
-  }, [isOpen]);
+  }, [isOpen, setToken]);
 
-  // Turnstile widget lifecycle
+  // Turnstile widget lifecycle (only runs when isOpen / siteKey changes, NOT on error handler or coords changes)
   useEffect(() => {
     if (!isOpen || !isTurnstileConfigured || !siteKey || typeof window === 'undefined') {
       return;
@@ -225,33 +282,22 @@ export function LocationPicker({
       const win = window as any;
       if (!isMounted || !win.turnstile || !turnstileContainerRef.current) return;
 
+      // Do NOT destroy and recreate if already rendered for this open session
       if (widgetIdRef.current) {
-        try {
-          win.turnstile.reset(widgetIdRef.current);
-          setTurnstileToken(null);
-          return;
-        } catch {
-          widgetIdRef.current = null;
-        }
+        return;
       }
 
       try {
         const currentTheme = (document.documentElement.getAttribute('data-theme') || 'dark') as 'dark' | 'light';
         const callbacks = createTurnstileCallbacks({
           setToken: (tok) => {
-            if (isMounted) setTurnstileToken(tok);
+            if (isMounted) setToken(tok);
           },
           onToastError: (code) => {
-            if (isMounted) onTurnstileError?.(code);
+            if (isMounted) onTurnstileErrorRef.current?.(code);
           },
           resetWidget: () => {
-            if (widgetIdRef.current && win.turnstile) {
-              try {
-                win.turnstile.reset(widgetIdRef.current);
-              } catch (e) {
-                console.error('Turnstile reset error:', e);
-              }
-            }
+            resetTurnstile();
           },
         });
 
@@ -299,7 +345,7 @@ export function LocationPicker({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, isTurnstileConfigured, siteKey, onTurnstileError]);
+  }, [isOpen, isTurnstileConfigured, siteKey, setToken, resetTurnstile]);
 
   if (!isOpen) return null;
 
@@ -316,17 +362,22 @@ export function LocationPicker({
     }
   };
 
-  const isChecking = isTurnstileConfigured && !turnstileToken;
-  const isSendDisabled = isSubmitting || isChecking;
+  const hasToken = Boolean(tokenRef.current || turnstileToken);
+  const isChecking = isTurnstileConfigured && !hasToken;
+  const isSendDisabled = isSubmitting || (isChecking && !isTimedOut);
 
-  const handleConfirm = () => {
+  const handleActionClick = () => {
+    if (isTimedOut && !hasToken) {
+      handleRetry();
+      return;
+    }
     if (isSendDisabled) return;
     onConfirm({
       lat: coords.lat,
       lng: coords.lng,
       loc_precision: precision,
       area_name: selectedArea || undefined,
-      turnstile_token: turnstileToken || undefined,
+      turnstile_token: tokenRef.current || turnstileToken || undefined,
     });
   };
 
@@ -421,11 +472,13 @@ export function LocationPicker({
           </button>
           <button
             type="button"
-            onClick={handleConfirm}
-            disabled={isSendDisabled}
+            onClick={handleActionClick}
+            disabled={isSubmitting || (isChecking && !isTimedOut)}
             className={`flex-1 h-12 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
-              isSendDisabled
+              isSubmitting || (isChecking && !isTimedOut)
                 ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed opacity-60'
+                : isTimedOut && !hasToken
+                ? 'bg-amber-600/30 text-amber-200 border border-amber-500/50 hover:bg-amber-600/40 cursor-pointer active:scale-[0.98]'
                 : kind === 'back'
                 ? 'bg-[var(--back)] text-white shadow-[0_0_15px_rgba(255,176,32,0.35)] hover:brightness-105 active:scale-[0.98] cursor-pointer'
                 : 'bg-[var(--out)] text-white shadow-[0_0_15px_rgba(255,75,75,0.35)] hover:brightness-105 active:scale-[0.98] cursor-pointer'
@@ -433,13 +486,31 @@ export function LocationPicker({
           >
             {isSubmitting ? (
               <span>Sending…</span>
-            ) : isChecking ? (
+            ) : hasToken || !isTurnstileConfigured ? (
+              <span>{t('btn_send') || 'Send'}</span>
+            ) : isTimedOut ? (
+              <span className="flex items-center gap-1.5">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="shrink-0"
+                >
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                </svg>
+                <span>{t('btn_retry') || 'Tap to retry'}</span>
+              </span>
+            ) : (
               <span className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-slate-400 animate-ping shrink-0" />
                 <span>{t('btn_checking') || 'Checking…'}</span>
               </span>
-            ) : (
-              <span>{t('btn_send') || 'Send'}</span>
             )}
           </button>
         </div>

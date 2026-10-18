@@ -94,6 +94,13 @@ function BanangeApp() {
     }, 4500);
   }, []);
 
+  const handleTurnstileError = useCallback(
+    (code: string) => {
+      showToast(t('err_check_failed'), code);
+    },
+    [showToast, t]
+  );
+
   // Fetch live map data
   const fetchMapData = useCallback(async () => {
     try {
@@ -442,7 +449,7 @@ function BanangeApp() {
         initialPrecision={pickerInitialPrecision}
         isSubmitting={isReporting}
         resetSignal={turnstileResetSignal}
-        onTurnstileError={(code) => showToast(t('err_check_failed'), code)}
+        onTurnstileError={handleTurnstileError}
         onClose={() => {
           setIsPickerOpen(false);
           setPendingReportKind(null);

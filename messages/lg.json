@@ -43,5 +43,6 @@
   "since_label": "okuva {time}",
   "close": "Ggalawo",
   "btn_send": "Sindika",
-  "btn_checking": "Kikebera…"
+  "btn_checking": "Kikebera…",
+  "btn_retry": "Nyooga okuddamu"
 }

@@ -43,5 +43,6 @@
   "since_label": "since {time}",
   "close": "Close",
   "btn_send": "Send",
-  "btn_checking": "Checking…"
+  "btn_checking": "Checking…",
+  "btn_retry": "Tap to retry"
 }
