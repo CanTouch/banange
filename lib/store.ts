@@ -56,6 +56,13 @@ function getMemoryStoreState(): MemoryStoreState {
 }
 
 export class MemoryStore implements ReportStore {
+  constructor(initialState?: MemoryStoreState) {
+    if (initialState) {
+      this.state.reports = [...initialState.reports];
+      this.state.blocked = new Set(initialState.blocked);
+    }
+  }
+
   private get state(): MemoryStoreState {
     return getMemoryStoreState();
   }
@@ -229,7 +236,14 @@ export class SupabaseStore implements ReportStore {
   }
 }
 
+import { generateDemoReports } from './demoData';
+
+export function isDemoMode(): boolean {
+  return process.env.DEMO_MODE === 'true' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+}
+
 export function isDevMode(): boolean {
+  if (isDemoMode()) return false;
   return (
     process.env.NODE_ENV !== 'production' &&
     (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY)
@@ -237,6 +251,7 @@ export function isDevMode(): boolean {
 }
 
 export function isProductionMissingConfig(): boolean {
+  if (isDemoMode()) return false;
   return (
     process.env.NODE_ENV === 'production' &&
     (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY)
@@ -244,8 +259,19 @@ export function isProductionMissingConfig(): boolean {
 }
 
 let storeInstance: ReportStore | null = null;
+let demoStoreInstance: ReportStore | null = null;
 
 export function getStore(): ReportStore {
+  if (isDemoMode()) {
+    if (!demoStoreInstance) {
+      demoStoreInstance = new MemoryStore({
+        reports: generateDemoReports(),
+        blocked: new Set(),
+      });
+    }
+    return demoStoreInstance;
+  }
+
   if (isProductionMissingConfig()) {
     throw new Error('Database misconfigured: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production.');
   }

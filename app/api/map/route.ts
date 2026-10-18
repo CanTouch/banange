@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getStore, isDevMode, isProductionMissingConfig } from '@/lib/store';
+import { getStore, isDevMode, isDemoMode, isProductionMissingConfig } from '@/lib/store';
 import { computeState } from '@/lib/states';
 import { parseCell } from '@/lib/cells';
 import { GRID_SIZE_DEG } from '@/lib/constants';
@@ -104,6 +104,7 @@ export async function GET() {
     const body = {
       generated_at: now.toISOString(),
       dev_mode: isDevMode(),
+      demo_mode: isDemoMode(),
       cells: cellsWithArea,
       areas: areasList,
       totals: {

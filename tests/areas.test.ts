@@ -26,4 +26,14 @@ describe('areas logic', () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].name).toBe('Ntinda');
   });
+
+  it('a point in Makerere returns "Makerere" or "Kikoni"', () => {
+    const area = nearestArea(0.3345, 32.5675);
+    expect(['Makerere', 'Makerere Kikoni', 'Kikoni']).toContain(area);
+  });
+
+  it('a point in Nakasero returns "Nakasero"', () => {
+    const area = nearestArea(0.3225, 32.5815);
+    expect(area).toBe('Nakasero');
+  });
 });

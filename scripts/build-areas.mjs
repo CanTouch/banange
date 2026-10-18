@@ -8,15 +8,34 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 const dataDir = path.join(rootDir, 'data');
 const starterPath = path.join(dataDir, 'areas.starter.json');
+const customPath = path.join(dataDir, 'areas.custom.json');
 const outputPath = path.join(dataDir, 'areas.json');
 
 async function fallback() {
-  console.warn('Falling back to data/areas.starter.json...');
+  console.warn('Falling back to data/areas.starter.json and areas.custom.json...');
   try {
-    fs.copyFileSync(starterPath, outputPath);
-    console.log('Copied areas.starter.json to areas.json');
+    const customData = fs.existsSync(customPath) ? JSON.parse(fs.readFileSync(customPath, 'utf8')) : [];
+    const starterData = fs.existsSync(starterPath) ? JSON.parse(fs.readFileSync(starterPath, 'utf8')) : [];
+    const merged = [];
+    const seen = new Set();
+    for (const item of customData) {
+      const key = item.name.toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(item);
+      }
+    }
+    for (const item of starterData) {
+      const key = item.name.toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(item);
+      }
+    }
+    fs.writeFileSync(outputPath, JSON.stringify(merged, null, 2), 'utf8');
+    console.log(`Saved ${merged.length} fallback areas to areas.json`);
   } catch (err) {
-    console.error('Failed to copy starter file:', err);
+    console.error('Failed to build fallback file:', err);
   }
 }
 
@@ -121,18 +140,38 @@ async function run() {
     areas.sort((a, b) => b.pop - a.pop);
     const sliced = areas.slice(0, 4000);
 
-    // Merge in any starter areas that might be missing or specific to Kampala
-    const starterData = JSON.parse(fs.readFileSync(starterPath, 'utf8'));
-    for (const item of starterData) {
-      const dedupeKey = `${item.name.toLowerCase()}_${item.lat.toFixed(2)}_${item.lng.toFixed(2)}`;
-      if (!seen.has(dedupeKey)) {
-        seen.add(dedupeKey);
-        sliced.push(item);
+    // Priority merge: custom areas have highest priority (dedupe by name)
+    const customData = fs.existsSync(customPath) ? JSON.parse(fs.readFileSync(customPath, 'utf8')) : [];
+    const finalMerged = [];
+    const nameSeen = new Set();
+
+    for (const item of customData) {
+      const nameKey = item.name.toLowerCase().trim();
+      if (!nameSeen.has(nameKey)) {
+        nameSeen.add(nameKey);
+        finalMerged.push(item);
       }
     }
 
-    fs.writeFileSync(outputPath, JSON.stringify(sliced, null, 2), 'utf8');
-    console.log(`Saved ${sliced.length} areas to data/areas.json`);
+    for (const item of sliced) {
+      const nameKey = item.name.toLowerCase().trim();
+      if (!nameSeen.has(nameKey)) {
+        nameSeen.add(nameKey);
+        finalMerged.push(item);
+      }
+    }
+
+    const starterData = JSON.parse(fs.readFileSync(starterPath, 'utf8'));
+    for (const item of starterData) {
+      const nameKey = item.name.toLowerCase().trim();
+      if (!nameSeen.has(nameKey)) {
+        nameSeen.add(nameKey);
+        finalMerged.push(item);
+      }
+    }
+
+    fs.writeFileSync(outputPath, JSON.stringify(finalMerged, null, 2), 'utf8');
+    console.log(`Saved ${finalMerged.length} areas to data/areas.json`);
 
     // Clean up temp files
     try {

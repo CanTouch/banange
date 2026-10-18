@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useI18n } from '@/lib/i18n';
 import { useLiteMode } from '@/lib/liteMode';
 
@@ -12,127 +12,49 @@ interface CelebrationOverlayProps {
 export function CelebrationOverlay({ type, onDismiss }: CelebrationOverlayProps) {
   const { t } = useI18n();
   const { isLite } = useLiteMode();
-  const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
-    if (!type) {
-      setActiveStep(0);
-      return;
-    }
+    if (!type) return;
 
     if (!isLite && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try {
-        navigator.vibrate(30);
+        navigator.vibrate(25);
       } catch {
         // ignore
       }
     }
 
-    if (isLite) {
-      const timer = setTimeout(() => {
-        onDismiss();
-      }, 1200);
-      return () => clearTimeout(timer);
-    }
+    const timer = setTimeout(() => {
+      onDismiss();
+    }, 2200);
 
-    if (type === 'out') {
-      // Stagger letters E, E, H, H (150ms each)
-      const t1 = setTimeout(() => setActiveStep(1), 150);
-      const t2 = setTimeout(() => setActiveStep(2), 300);
-      const t3 = setTimeout(() => setActiveStep(3), 450);
-      const t4 = setTimeout(() => setActiveStep(4), 600);
-      const autoDismiss = setTimeout(() => {
-        onDismiss();
-      }, 1800);
-
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-        clearTimeout(t3);
-        clearTimeout(t4);
-        clearTimeout(autoDismiss);
-      };
-    } else if (type === 'back') {
-      const autoDismiss = setTimeout(() => {
-        onDismiss();
-      }, 1500);
-
-      return () => clearTimeout(autoDismiss);
-    }
+    return () => clearTimeout(timer);
   }, [type, isLite, onDismiss]);
 
   if (!type) return null;
-
-  // Lite mode display
-  if (isLite) {
-    return (
-      <div
-        role="status"
-        aria-live="polite"
-        onClick={onDismiss}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 cursor-pointer select-none"
-      >
-        <div className="p-6 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-2xl text-center max-w-xs w-full animate-fade-in">
-          <h2 className="text-xl font-bold font-heading text-[var(--text)] mb-1">
-            {type === 'out' ? t('out_title') : t('back_title')}
-          </h2>
-          <p className="text-sm text-[var(--muted)]">
-            {type === 'out' ? t('out_sub') : t('back_sub')}
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div
       role="status"
       aria-live="polite"
       onClick={onDismiss}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 cursor-pointer select-none overflow-hidden"
+      className="fixed inset-0 z-50 pointer-events-none flex flex-col items-center justify-end pb-40 px-4"
     >
-      {type === 'back' && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="w-96 h-96 rounded-full bg-gradient-radial from-[var(--back)]/40 to-transparent animate-bloom" />
-        </div>
-      )}
-
-      <div className="relative p-7 rounded-3xl bg-[var(--surface)]/95 border border-[var(--border)] shadow-[0_12px_40px_rgba(0,0,0,0.6)] text-center max-w-sm w-full animate-pop-in">
-        {type === 'out' ? (
-          <>
-            {/* E E H H animated letters */}
-            <div className="flex items-center justify-center gap-1.5 mb-3 font-heading text-4xl font-extrabold text-[var(--out)] tracking-wider">
-              <span className={`inline-block transition-transform duration-200 ${activeStep >= 1 ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}`}>
-                E
-              </span>
-              <span className={`inline-block transition-transform duration-200 ${activeStep >= 2 ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}`}>
-                E
-              </span>
-              <span className={`inline-block transition-transform duration-200 ${activeStep >= 3 ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}`}>
-                H
-              </span>
-              <span className={`inline-block transition-transform duration-200 ${activeStep >= 4 ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}`}>
-                H
-              </span>
-              <span className="text-2xl text-[var(--muted)]">…</span>
-            </div>
-
-            <h2 className="text-lg font-bold font-heading text-[var(--text)] mb-1.5">
-              {t('out_title')}
-            </h2>
-            <p className="text-sm text-[var(--muted)]">{t('out_sub')}</p>
-          </>
-        ) : (
-          <>
-            <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-[var(--back)]/20 border border-[var(--back)] flex items-center justify-center text-[var(--back)] text-2xl animate-pop-in">
-              ⚡
-            </div>
-            <h2 className="text-2xl font-extrabold font-heading text-[var(--text)] mb-1.5">
-              {t('back_title')}
-            </h2>
-            <p className="text-sm text-[var(--muted)]">{t('back_sub')}</p>
-          </>
-        )}
+      {/* Glass pill with Instrument Serif text, floating up and fading */}
+      <div className="pointer-events-auto px-6 py-3 rounded-full bg-[var(--surface)]/95 border border-[var(--border)] shadow-[0_8px_30px_rgba(0,0,0,0.6)] backdrop-blur-xl flex items-center gap-3 animate-float-fade cursor-pointer">
+        <span
+          className={`w-2 h-2 rounded-full ${
+            type === 'out'
+              ? 'bg-[var(--out)] shadow-[0_0_8px_#FF4B4B]'
+              : 'bg-[var(--back)] shadow-[0_0_8px_#FFB547]'
+          }`}
+        />
+        <span className="font-serif text-2xl font-normal text-[var(--ink)] tracking-wide">
+          {type === 'out' ? t('out_title') : t('back_title')}
+        </span>
+        <span className="font-mono text-xs text-[var(--muted)]">
+          {type === 'out' ? t('out_sub') : t('back_sub')}
+        </span>
       </div>
     </div>
   );

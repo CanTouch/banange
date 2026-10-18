@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { DEFAULT_ZOOM, UGANDA_BOUNDS, UGANDA_CENTER } from '@/lib/constants';
 import { fetchBaseStyle, transformStyle } from '@/lib/mapStyle';
 import { CellOut } from '@/lib/states';
 import { useLiteMode } from '@/lib/liteMode';
-import { useI18n } from '@/lib/i18n';
+import { formatGeoJSON } from '@/lib/history';
 
 interface MapViewProps {
   cells: Array<CellOut & { area?: string }>;
@@ -17,16 +17,21 @@ interface MapViewProps {
 export function MapView({ cells, flyToLocation }: MapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const isMapLoadedRef = useRef<boolean>(false);
+  const cellsRef = useRef<Array<CellOut & { area?: string }>>(cells);
   const pulseAnimRef = useRef<number | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
 
   const { isLite } = useLiteMode();
-  const { t } = useI18n();
-
   const isLiteRef = useRef(isLite);
+
   useEffect(() => {
     isLiteRef.current = isLite;
   }, [isLite]);
+
+  useEffect(() => {
+    cellsRef.current = cells;
+  }, [cells]);
 
   const formatEAT = (isoStr?: string) => {
     if (!isoStr) return '';
@@ -42,52 +47,24 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
     }
   };
 
-  const formatDuration = (sinceIso: string) => {
-    const diffMs = Date.now() - new Date(sinceIso).getTime();
-    const hours = Math.floor(diffMs / (3600 * 1000));
-    const mins = Math.floor((diffMs % (3600 * 1000)) / (60 * 1000));
-    if (hours > 0) {
-      return `${hours} h ${mins} m`;
-    }
-    return `${Math.max(1, mins)} m`;
-  };
+  const setupDataLayers = (map: maplibregl.Map, currentCells: Array<CellOut & { area?: string }>) => {
+    const geojson = formatGeoJSON(currentCells);
 
-  const getGeoJSON = useCallback(() => {
-    return {
-      type: 'FeatureCollection' as const,
-      features: cells.map((c) => ({
-        type: 'Feature' as const,
-        geometry: {
-          type: 'Point' as const,
-          coordinates: [c.lng, c.lat],
-        },
-        properties: {
-          cell_id: c.cell_id,
-          state: c.state,
-          confirmed: c.confirmed,
-          approximate: c.approximate,
-          since: c.since,
-          last_activity: c.last_activity,
-          restored_at: c.restored_at || '',
-          fade: c.fade ?? 1,
-          reporters: c.reporters,
-          area: c.area || '',
-        },
-      })),
-    };
-  }, [cells]);
-
-  const addDataLayers = useCallback((map: maplibregl.Map) => {
     if (!map.getSource('cells-source')) {
       map.addSource('cells-source', {
         type: 'geojson',
-        data: getGeoJSON(),
+        data: geojson,
       });
+    } else {
+      const source = map.getSource('cells-source') as maplibregl.GeoJSONSource | undefined;
+      if (source) {
+        source.setData(geojson);
+      }
     }
 
     const lite = isLiteRef.current;
 
-    // 1. Confirmed Out - Halo
+    // 1. Confirmed Out - Soft Radial Glow Halo (slow pulse)
     if (!lite && !map.getLayer('out-confirmed-halo')) {
       map.addLayer({
         id: 'out-confirmed-halo',
@@ -95,15 +72,15 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
         source: 'cells-source',
         filter: ['all', ['==', ['get', 'state'], 'out'], ['==', ['get', 'confirmed'], true]],
         paint: {
-          'circle-radius': 22,
-          'circle-color': '#FF4D4D',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 18, 8, 26, 14, 38],
+          'circle-color': '#FF4B4B',
           'circle-opacity': 0.35,
           'circle-blur': 0.8,
         },
       });
     }
 
-    // 2. Confirmed Out - Inner Circle
+    // 2. Confirmed Out - Inner Dot (solid red with white stroke)
     if (!map.getLayer('out-confirmed-inner')) {
       map.addLayer({
         id: 'out-confirmed-inner',
@@ -111,15 +88,15 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
         source: 'cells-source',
         filter: ['all', ['==', ['get', 'state'], 'out'], ['==', ['get', 'confirmed'], true]],
         paint: {
-          'circle-radius': 7,
-          'circle-color': '#FF4D4D',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 6, 8, 7.5, 14, 10],
+          'circle-color': '#FF4B4B',
           'circle-stroke-width': 1.5,
           'circle-stroke-color': '#FFFFFF',
         },
       });
     }
 
-    // 3. Unconfirmed Out - Inner Circle
+    // 3. Unconfirmed Out - Dimmer Fill with Ring
     if (!map.getLayer('out-unconfirmed-inner')) {
       map.addLayer({
         id: 'out-unconfirmed-inner',
@@ -127,17 +104,17 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
         source: 'cells-source',
         filter: ['all', ['==', ['get', 'state'], 'out'], ['==', ['get', 'confirmed'], false]],
         paint: {
-          'circle-radius': 6,
-          'circle-color': '#FF4D4D',
-          'circle-opacity': 0.6,
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 5.5, 8, 7, 14, 9.5],
+          'circle-color': '#FF4B4B',
+          'circle-opacity': 0.38,
           'circle-stroke-width': 1.5,
-          'circle-stroke-color': '#FF4D4D',
-          'circle-stroke-opacity': 0.8,
+          'circle-stroke-color': '#FF7A7A',
+          'circle-stroke-opacity': 0.85,
         },
       });
     }
 
-    // 4. Restored - Halo
+    // 4. Power Back Restored - Amber Halo (fades over 2h)
     if (!lite && !map.getLayer('restored-halo')) {
       map.addLayer({
         id: 'restored-halo',
@@ -145,15 +122,15 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
         source: 'cells-source',
         filter: ['==', ['get', 'state'], 'restored'],
         paint: {
-          'circle-radius': 16,
-          'circle-color': '#FFB020',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 16, 8, 22, 14, 32],
+          'circle-color': '#FFB547',
           'circle-opacity': ['*', 0.35, ['get', 'fade']],
           'circle-blur': 0.7,
         },
       });
     }
 
-    // 5. Restored - Inner Circle
+    // 5. Power Back Restored - Inner Circle
     if (!map.getLayer('restored-inner')) {
       map.addLayer({
         id: 'restored-inner',
@@ -161,27 +138,25 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
         source: 'cells-source',
         filter: ['==', ['get', 'state'], 'restored'],
         paint: {
-          'circle-radius': 6,
-          'circle-color': '#FFB020',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 5.5, 8, 7, 14, 9],
+          'circle-color': '#FFB547',
           'circle-opacity': ['get', 'fade'],
-          'circle-stroke-width': 1,
+          'circle-stroke-width': 1.5,
           'circle-stroke-color': '#FFFFFF',
           'circle-stroke-opacity': ['get', 'fade'],
         },
       });
     }
-  }, [getGeoJSON]);
+  };
 
-  // Update source data when cells change
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !isMapLoadedRef.current) return;
     const source = mapRef.current.getSource('cells-source') as maplibregl.GeoJSONSource | undefined;
     if (source) {
-      source.setData(getGeoJSON());
+      source.setData(formatGeoJSON(cells));
     }
-  }, [cells, getGeoJSON]);
+  }, [cells]);
 
-  // FlyTo effect
   useEffect(() => {
     if (!mapRef.current || !flyToLocation) return;
     mapRef.current.flyTo({
@@ -192,14 +167,12 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
     });
   }, [flyToLocation]);
 
-  // Init Map
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
     let isSubscribed = true;
 
     async function init() {
-      // Ensure worker URL is set to CSP worker in public directory
       if (typeof maplibregl.setWorkerUrl === 'function') {
         maplibregl.setWorkerUrl('/maplibre-gl-csp-worker.js');
       } else if ('workerUrl' in (maplibregl as Record<string, unknown>)) {
@@ -231,7 +204,6 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
         attributionControl: false,
       });
 
-      // Attribution bottom-left
       map.addControl(
         new maplibregl.AttributionControl({
           compact: true,
@@ -241,10 +213,11 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
       );
 
       map.on('load', () => {
-        addDataLayers(map);
+        isMapLoadedRef.current = true;
+        setupDataLayers(map, cellsRef.current);
       });
 
-      // Dot click handler
+      // Dot click handler - small glass card
       const interactiveLayers = ['out-confirmed-inner', 'out-unconfirmed-inner', 'restored-inner'];
 
       interactiveLayers.forEach((layerId) => {
@@ -258,27 +231,15 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
 
           const isOut = props.state === 'out';
           const timeEat = isOut ? formatEAT(props.since) : formatEAT(props.restored_at);
-          const timeText = isOut
-            ? `Out since ${timeEat} (${formatDuration(props.since)})`
+          const statusText = isOut
+            ? `Out since ${timeEat} · ${props.confirmed ? 'Confirmed' : 'Unconfirmed'}`
             : `Power back at ${timeEat}`;
 
-          const confirmedTag = props.confirmed
-            ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#FF4D4D]/20 text-[#FF4D4D] border border-[#FF4D4D]/40">Confirmed</span>`
-            : `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-[#8A94AD]/20 text-[#8A94AD] border border-[#8A94AD]/40">Unconfirmed</span>`;
-
-          const approxTag = props.approximate
-            ? `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-400 border border-amber-500/40">Approximate location</span>`
-            : '';
-
           const html = `
-            <div class="flex flex-col gap-1.5 min-w-[180px] text-left">
-              <h4 class="font-bold text-sm text-[var(--text)]">${props.area || 'Uganda'}</h4>
-              <p class="text-xs text-[var(--muted)] font-medium">${timeText}</p>
-              <div class="flex flex-wrap gap-1 mt-1">
-                ${confirmedTag}
-                ${approxTag}
-              </div>
-              <p class="text-[11px] text-[var(--muted)] mt-1 border-t border-[var(--border)] pt-1">
+            <div class="flex flex-col gap-1 min-w-[170px] text-left">
+              <h4 class="font-serif text-lg leading-tight font-normal text-[var(--ink)]">${props.area || 'Uganda'}</h4>
+              <p class="font-mono text-[11px] text-[var(--muted)]">${statusText}</p>
+              <p class="font-mono text-[10px] text-[var(--faint)] pt-1 mt-0.5 border-t border-[var(--border)]">
                 ${props.reporters || 1} people reported
               </p>
             </div>
@@ -303,14 +264,18 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
         });
       });
 
-      // Pulse animation for confirmed out halo (cap 30 fps)
+      // Slow pulse animation (2.4s) for confirmed out halo, respecting prefers-reduced-motion
+      const prefersReducedMotion =
+        typeof window !== 'undefined' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
       let lastTime = 0;
       function pulseStep(time: number) {
-        if (!isLiteRef.current && map.getLayer('out-confirmed-halo')) {
+        if (!isLiteRef.current && !prefersReducedMotion && map.getLayer('out-confirmed-halo')) {
           if (time - lastTime >= 33) {
             lastTime = time;
             const progress = (time % 2400) / 2400;
-            const radius = 18 + 8 * Math.sin(progress * Math.PI);
+            const radius = 18 + 7 * Math.sin(progress * Math.PI);
             try {
               map.setPaintProperty('out-confirmed-halo', 'circle-radius', radius);
             } catch {
@@ -321,7 +286,9 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
         pulseAnimRef.current = requestAnimationFrame(pulseStep);
       }
 
-      pulseAnimRef.current = requestAnimationFrame(pulseStep);
+      if (!prefersReducedMotion) {
+        pulseAnimRef.current = requestAnimationFrame(pulseStep);
+      }
 
       // Handle theme change event
       const onThemeChange = async (e: Event) => {
@@ -330,7 +297,7 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
         const nextStyle = transformStyle(freshBase, nextTheme);
         map.setStyle(nextStyle);
         map.once('style.load', () => {
-          addDataLayers(map);
+          setupDataLayers(map, cellsRef.current);
         });
       };
 
@@ -352,13 +319,21 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
+        isMapLoadedRef.current = false;
       }
     };
-  }, [addDataLayers]);
+  }, []);
 
   return (
     <div className="relative w-full h-full flex-1">
       <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
+      {/* Radial vignette */}
+      <div
+        className="pointer-events-none absolute inset-0 z-10"
+        style={{
+          background: 'var(--vignette)',
+        }}
+      />
     </div>
   );
 }

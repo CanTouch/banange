@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic';
 const MapView = dynamic(() => import('@/components/MapView').then((mod) => mod.MapView), {
   ssr: false,
 });
-import { ReportButtons } from '@/components/ReportButtons';
+
 import { BackPrompt } from '@/components/BackPrompt';
 import { AreaSheet, AreaOutageItem, WeeklyAreaStat } from '@/components/AreaSheet';
 import { LocationPicker } from '@/components/LocationPicker';
@@ -19,17 +19,55 @@ import { CellOut } from '@/lib/states';
 import { POLL_SECONDS } from '@/lib/constants';
 import { getClientDeviceId } from '@/lib/device';
 import { enqueueReport, flushOfflineQueue } from '@/lib/offlineQueue';
+import { TimeSlider } from '@/components/TimeSlider';
+import { useLiteMode } from '@/lib/liteMode';
 
 function BanangeApp() {
   const { t } = useI18n();
+  const { isLite } = useLiteMode();
 
   // State
   const [cells, setCells] = useState<Array<CellOut & { area?: string }>>([]);
+  const [historicalCells, setHistoricalCells] = useState<Array<CellOut & { area?: string }> | null>(null);
+  const [historyLabel, setHistoryLabel] = useState<string | null>(null);
   const [weeklyStats, setWeeklyStats] = useState<WeeklyAreaStat[]>([]);
   const [isDev, setIsDev] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
   const [totals, setTotals] = useState<{ dark_now: number; confirmed_now: number } | null>(null);
-  const [apiFailed, setApiFailed] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Time label: "SUN 18 OCT · 20:14 EAT"
+  const [currentTimeLabel, setCurrentTimeLabel] = useState<string>('');
+
+  useEffect(() => {
+    const updateTime = () => {
+      try {
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Africa/Kampala',
+          weekday: 'short',
+          day: '2-digit',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }).formatToParts(new Date());
+
+        const p = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+        const weekday = (p.weekday || '').toUpperCase();
+        const day = p.day || '';
+        const month = (p.month || '').toUpperCase();
+        const hour = p.hour || '00';
+        const minute = p.minute || '00';
+        setCurrentTimeLabel(`${weekday} ${day} ${month} · ${hour}:${minute} EAT`);
+      } catch {
+        setCurrentTimeLabel('EAT');
+      }
+    };
+
+    updateTime();
+    const timer = setInterval(updateTime, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Modals & Overlays
   const [isAboutOpen, setIsAboutOpen] = useState(false);
@@ -64,33 +102,39 @@ function BanangeApp() {
       setWeeklyStats(data.areas || []);
       setTotals(data.totals || { dark_now: 0, confirmed_now: 0 });
       setIsDev(Boolean(data.dev_mode));
+      setIsDemo(Boolean(data.demo_mode));
       setErrorMessage(null);
-      setApiFailed(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unable to connect to outage database';
-      setApiFailed(true);
       setErrorMessage(msg);
     }
   }, []);
+
+  const isHistoricalRef = useRef(false);
 
   // Polling & online resync
   useEffect(() => {
     fetchMapData();
 
     const interval = setInterval(() => {
-      fetchMapData();
+      if (!isHistoricalRef.current) {
+        fetchMapData();
+      }
     }, POLL_SECONDS * 1000);
 
     const handleOnline = () => {
       flushOfflineQueue(() => {
-        fetchMapData();
+        if (!isHistoricalRef.current) {
+          fetchMapData();
+        }
       });
     };
 
     window.addEventListener('online', handleOnline);
-    // Try flush on startup
     flushOfflineQueue(() => {
-      fetchMapData();
+      if (!isHistoricalRef.current) {
+        fetchMapData();
+      }
     });
 
     return () => {
@@ -125,7 +169,6 @@ function BanangeApp() {
 
         if (res.ok) {
           const data = await res.json();
-          // Save or clear last out record
           if (payload.kind === 'out') {
             try {
               localStorage.setItem(
@@ -148,10 +191,8 @@ function BanangeApp() {
             }
           }
 
-          // Trigger celebration
           setCelebrationType(payload.kind);
 
-          // Fly map to reported location
           setFlyTo({
             lat: data.cell_lat || payload.lat,
             lng: data.cell_lng || payload.lng,
@@ -159,7 +200,6 @@ function BanangeApp() {
             timestamp: Date.now(),
           });
 
-          // Re-fetch map data
           fetchMapData();
         } else if (res.status === 429) {
           const errData = await res.json().catch(() => ({}));
@@ -171,7 +211,6 @@ function BanangeApp() {
           showToast(t('err_generic'));
         }
       } catch {
-        // Network failure -> queue offline
         enqueueReport(body);
         showToast(t('offline_saved'));
       } finally {
@@ -181,7 +220,6 @@ function BanangeApp() {
     [fetchMapData, showToast, t]
   );
 
-  // Initiates report action from dock button
   const handleReportClick = (kind: 'out' | 'back') => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setPendingReportKind(kind);
@@ -199,7 +237,6 @@ function BanangeApp() {
         });
       },
       () => {
-        // Denied, timeout or unavailable -> fallback to LocationPicker
         setPendingReportKind(kind);
         setIsPickerOpen(true);
       },
@@ -211,7 +248,6 @@ function BanangeApp() {
     );
   };
 
-  // Confirm location from LocationPicker
   const handlePickerConfirm = (loc: {
     lat: number;
     lng: number;
@@ -230,7 +266,6 @@ function BanangeApp() {
     setPendingReportKind(null);
   };
 
-  // Confirm back from top prompt banner
   const handleBackPromptConfirm = (saved: {
     lat: number;
     lng: number;
@@ -244,8 +279,9 @@ function BanangeApp() {
     });
   };
 
-  // Areas dark now for AreaSheet
-  const darkNowList: AreaOutageItem[] = cells
+  const displayedCells = historicalCells !== null ? historicalCells : cells;
+
+  const darkNowList: AreaOutageItem[] = displayedCells
     .filter((c) => c.state === 'out')
     .map((c) => ({
       name: c.area || 'Uganda',
@@ -255,47 +291,56 @@ function BanangeApp() {
       confirmed: c.confirmed,
     }));
 
+  const darkCount = darkNowList.length;
+
   return (
-    <main className="relative w-screen h-screen overflow-hidden flex flex-col bg-[var(--bg)] text-[var(--text)] select-none">
+    <main className="relative w-screen h-screen overflow-hidden flex flex-col bg-[var(--bg)] text-[var(--ink)] select-none">
       {/* Top Bar */}
-      <TopBar isDev={isDev} onOpenAbout={() => setIsAboutOpen(true)} />
+      <TopBar isDev={isDev} isDemo={isDemo} onOpenAbout={() => setIsAboutOpen(true)} />
+
+      {/* 4. Status Line & 5. Headline floating on top-left over map */}
+      <div className="absolute top-16 left-5 z-20 pointer-events-none select-none max-w-xs sm:max-w-md animate-fade-in">
+        {/* Status Line: IBM Plex Mono 10px uppercase tracking-[0.14em] text-[var(--muted)] */}
+        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted)] mb-1">
+          {historyLabel ? historyLabel.toUpperCase() : currentTimeLabel || 'KAMPALA · EAT'}
+        </p>
+
+        {/* Headline: Instrument Serif 54px line-height 0.96 */}
+        <div className="font-serif text-[42px] sm:text-[54px] leading-[0.96] text-[var(--ink)] tracking-tight">
+          {darkCount > 0 ? (
+            <>
+              <div>
+                {darkCount} {darkCount === 1 ? 'area' : 'areas'}
+              </div>
+              <div className="italic text-[var(--muted)]">in the dark</div>
+            </>
+          ) : (
+            <>
+              <div>All lit</div>
+              <div className="italic text-[var(--muted)]">up tonight</div>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Production / Database Error Banner */}
       {errorMessage && (
         <aside
           role="alert"
           aria-label="Database error notification"
-          className="absolute top-16 left-4 right-4 z-40 mx-auto max-w-lg p-3.5 rounded-2xl bg-red-950/90 border border-red-500/80 shadow-2xl backdrop-blur-md text-red-200 text-xs font-semibold flex items-center justify-between gap-3 animate-pop-in pointer-events-auto"
+          className="absolute top-20 left-4 right-4 z-40 mx-auto max-w-lg p-3 rounded-2xl bg-red-950/90 border border-red-500/80 shadow-2xl backdrop-blur-md text-red-200 text-xs font-semibold flex items-center justify-between gap-3 animate-pop-in pointer-events-auto"
         >
           <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping shrink-0" />
-            <span>{errorMessage}</span>
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping shrink-0" />
+            <span className="font-mono">{errorMessage}</span>
           </div>
           <button
             onClick={() => fetchMapData()}
-            className="px-2.5 py-1 rounded-lg bg-red-900 border border-red-700 text-red-100 hover:bg-red-800 text-[11px] font-bold shrink-0 cursor-pointer"
+            className="px-2.5 py-1 rounded-lg bg-red-900 border border-red-700 text-red-100 hover:bg-red-800 text-[11px] font-mono shrink-0 cursor-pointer"
           >
             Retry
           </button>
         </aside>
-      )}
-
-      {/* Stats Chip under Top Bar */}
-      {!apiFailed && totals !== null && (
-        <div className="absolute top-16 left-0 right-0 z-20 flex justify-center pointer-events-none px-4">
-          <div className="px-3.5 py-1.5 rounded-full bg-[var(--surface)]/90 backdrop-blur-md border border-[var(--border)] shadow-md text-xs font-semibold flex items-center gap-2 pointer-events-auto">
-            {totals.dark_now > 0 ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-[var(--out)] animate-pulse" />
-                <span className="text-[var(--text)]">
-                  {t('stats_dark_now', { n: totals.dark_now })}
-                </span>
-              </>
-            ) : (
-              <span className="text-[var(--muted)]">{t('stats_none')}</span>
-            )}
-          </div>
-        </div>
       )}
 
       {/* "Is it back?" Prompt Banner */}
@@ -305,25 +350,55 @@ function BanangeApp() {
       {toast && (
         <div
           role="alert"
-          className="absolute top-28 left-4 right-4 z-50 mx-auto max-w-sm p-3.5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-2xl backdrop-blur-md text-center text-xs font-medium text-[var(--text)] animate-pop-in"
+          className="absolute top-28 left-4 right-4 z-50 mx-auto max-w-sm p-3.5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-2xl backdrop-blur-md text-center text-xs font-medium text-[var(--ink)] animate-pop-in"
         >
           {toast}
         </div>
       )}
 
       {/* Map View */}
-      <MapView cells={cells} flyToLocation={flyTo} />
+      <MapView cells={displayedCells} flyToLocation={flyTo} />
 
-      {/* Bottom Area: Area Sheet & Report Buttons Dock */}
+      {/* No outages reported overlay when in historical mode with 0 outages */}
+      {historicalCells !== null && darkCount === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+          <div className="px-4 py-2 rounded-xl bg-[var(--surface)] border border-[var(--border)] backdrop-blur-md font-mono text-xs text-[var(--muted)] shadow-xl">
+            No outages reported at this time
+          </div>
+        </div>
+      )}
+
+      {/* Bottom Area: History Scrubber + Bottom Sheet */}
       <div className="absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center pointer-events-none pb-safe">
+        {/* Phase 2: History Scrubber / Time Slider */}
+        <div className="w-full max-w-lg px-3 mb-2 pointer-events-auto">
+          <TimeSlider
+            isLite={isLite}
+            onHistoricalChange={(hCells, isLiveNow, label) => {
+              if (isLiveNow) {
+                isHistoricalRef.current = false;
+                setHistoricalCells(null);
+                setHistoryLabel(null);
+                fetchMapData();
+              } else {
+                isHistoricalRef.current = true;
+                setHistoricalCells(hCells);
+                setHistoryLabel(label || null);
+              }
+            }}
+          />
+        </div>
+
+        {/* 6. Bottom Sheet (includes side-by-side buttons, dark now list, and footer) */}
         <AreaSheet
           darkNowList={darkNowList}
           weeklyList={weeklyStats}
           onSelectArea={(lat, lng) => {
             setFlyTo({ lat, lng, zoom: 13, timestamp: Date.now() });
           }}
+          onReport={handleReportClick}
+          isReporting={isReporting}
         />
-        <ReportButtons onReport={handleReportClick} isLoading={isReporting} />
       </div>
 
       {/* Location Picker Sheet */}

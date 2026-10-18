@@ -1,6 +1,6 @@
-import { AREA_MATCH_KM } from './constants';
 import { haversineKm } from './cells';
 import starterAreas from '../data/areas.starter.json';
+import customAreas from '../data/areas.custom.json';
 
 export interface AreaRecord {
   name: string;
@@ -10,23 +10,63 @@ export interface AreaRecord {
   pop: number;
 }
 
+export const GREATER_KAMPALA_BOX = {
+  latMin: 0.15,
+  latMax: 0.50,
+  lngMin: 32.40,
+  lngMax: 32.80,
+};
+
+export function isInsideGreaterKampala(lat: number, lng: number): boolean {
+  return (
+    lat >= GREATER_KAMPALA_BOX.latMin &&
+    lat <= GREATER_KAMPALA_BOX.latMax &&
+    lng >= GREATER_KAMPALA_BOX.lngMin &&
+    lng <= GREATER_KAMPALA_BOX.lngMax
+  );
+}
+
 let loadedAreas: AreaRecord[] | null = null;
 
 export function getAreas(): AreaRecord[] {
   if (loadedAreas) return loadedAreas;
 
+  let baseList: AreaRecord[] = [];
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const generatedAreas = require('../data/areas.json');
     if (Array.isArray(generatedAreas) && generatedAreas.length > 0) {
-      loadedAreas = generatedAreas;
-      return loadedAreas!;
+      baseList = generatedAreas;
     }
   } catch {
     // fallback
   }
 
-  loadedAreas = starterAreas as AreaRecord[];
+  if (baseList.length === 0) {
+    baseList = starterAreas as AreaRecord[];
+  }
+
+  // Priority merge: custom areas take priority over GeoNames/starter (deduped by name)
+  const merged: AreaRecord[] = [];
+  const nameSeen = new Set<string>();
+
+  for (const item of customAreas as AreaRecord[]) {
+    const key = item.name.toLowerCase().trim();
+    if (!nameSeen.has(key)) {
+      nameSeen.add(key);
+      merged.push(item);
+    }
+  }
+
+  for (const item of baseList) {
+    const key = item.name.toLowerCase().trim();
+    if (!nameSeen.has(key)) {
+      nameSeen.add(key);
+      merged.push(item);
+    }
+  }
+
+  loadedAreas = merged;
   return loadedAreas;
 }
 
@@ -45,7 +85,11 @@ export function nearestArea(lat: number, lng: number): string {
     }
   }
 
-  if (minDist <= AREA_MATCH_KM) {
+  // Inside Greater Kampala box use 1.5 km; outside use 4.0 km
+  const inKampala = isInsideGreaterKampala(lat, lng);
+  const matchRadius = inKampala ? 1.5 : 4.0;
+
+  if (minDist <= matchRadius) {
     return closestName;
   }
   return `Near ${closestName}`;

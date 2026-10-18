@@ -1,19 +1,27 @@
 import type { Metadata, Viewport } from 'next';
-import { Bricolage_Grotesque, DM_Sans } from 'next/font/google';
+import { Instrument_Serif, Hanken_Grotesk, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 import { Analytics } from '@vercel/analytics/react';
 
-const bricolage = Bricolage_Grotesque({
+const instrumentSerif = Instrument_Serif({
   subsets: ['latin'],
-  weight: ['600', '700', '800'],
-  variable: '--font-heading',
+  weight: '400',
+  style: ['normal', 'italic'],
+  variable: '--font-serif',
   display: 'swap',
 });
 
-const dmSans = DM_Sans({
+const hankenGrotesk = Hanken_Grotesk({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-sans',
+  display: 'swap',
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
   subsets: ['latin'],
   weight: ['400', '500', '600'],
-  variable: '--font-body',
+  variable: '--font-mono',
   display: 'swap',
 });
 
@@ -55,7 +63,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#0B1020',
+  themeColor: '#05070D',
 };
 
 const themeScript = `
@@ -66,7 +74,7 @@ const themeScript = `
       document.documentElement.setAttribute('data-theme', theme);
       var meta = document.querySelector('meta[name="theme-color"]');
       if (meta) {
-        meta.setAttribute('content', theme === 'light' ? '#F7F4EE' : '#0B1020');
+        meta.setAttribute('content', theme === 'light' ? '#F3EDE0' : '#05070D');
       }
     } catch(e) {}
   })();
@@ -78,11 +86,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${bricolage.variable} ${dmSans.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${instrumentSerif.variable} ${hankenGrotesk.variable} ${ibmPlexMono.variable}`}
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="antialiased min-h-screen selection:bg-[#FF4D4D]/20 selection:text-white">
+      <body className="antialiased min-h-screen font-sans selection:bg-[#FF4B4B]/30 selection:text-white">
         {children}
         <Analytics />
       </body>
