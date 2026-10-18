@@ -76,17 +76,80 @@ function BanangeApp() {
   const [celebrationType, setCelebrationType] = useState<'out' | 'back' | null>(null);
   const [isReporting, setIsReporting] = useState(false);
 
-  // Toast / Status Message
-  const [toast, setToast] = useState<string | null>(null);
+  // Toast / Status Message with specific code
+  const [toast, setToast] = useState<{ message: string; code?: string } | null>(null);
 
   // Map Navigation
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number; zoom?: number; timestamp: number } | null>(null);
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
+  const showToast = useCallback((msg: string, code?: string) => {
+    setToast({ message: msg, code });
     setTimeout(() => {
       setToast(null);
-    }, 4000);
+    }, 4500);
+  }, []);
+
+  // Cloudflare Turnstile token management
+  const turnstileTokenRef = useRef<string | null>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    if (!siteKey || typeof window === 'undefined') return;
+
+    const renderTurnstile = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const win = window as any;
+      if (!win.turnstile || turnstileWidgetIdRef.current) return;
+      const container = document.getElementById('turnstile-container');
+      if (!container) return;
+
+      try {
+        const id = win.turnstile.render('#turnstile-container', {
+          sitekey: siteKey,
+          size: 'invisible',
+          callback: (token: string) => {
+            turnstileTokenRef.current = token;
+          },
+          'expired-callback': () => {
+            turnstileTokenRef.current = null;
+            if (turnstileWidgetIdRef.current) {
+              win.turnstile?.reset(turnstileWidgetIdRef.current);
+            }
+          },
+          'error-callback': () => {
+            turnstileTokenRef.current = null;
+          },
+        });
+        turnstileWidgetIdRef.current = id;
+      } catch {
+        // ignore
+      }
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).turnstile) {
+      renderTurnstile();
+    } else {
+      const existingScript = document.querySelector('script[src*="turnstile/v0/api.js"]');
+      if (!existingScript) {
+        const script = document.createElement('script');
+        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => renderTurnstile();
+        document.head.appendChild(script);
+      } else {
+        const interval = setInterval(() => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if ((window as any).turnstile) {
+            clearInterval(interval);
+            renderTurnstile();
+          }
+        }, 200);
+        return () => clearInterval(interval);
+      }
+    }
   }, []);
 
   // Fetch live map data
@@ -155,10 +218,16 @@ function BanangeApp() {
       setIsReporting(true);
       const deviceId = getClientDeviceId();
 
-      const body = {
+      const token = turnstileTokenRef.current;
+
+      const body: Record<string, unknown> = {
         ...payload,
         device_id: deviceId,
       };
+
+      if (token) {
+        body.turnstile_token = token;
+      }
 
       try {
         const res = await fetch('/api/report', {
@@ -201,20 +270,46 @@ function BanangeApp() {
           });
 
           fetchMapData();
-        } else if (res.status === 429) {
-          const errData = await res.json().catch(() => ({}));
-          const mins = Math.ceil((errData.retry_after_seconds || 600) / 60);
-          showToast(t('err_rate', { n: mins }));
-        } else if (res.status === 422) {
-          showToast(t('err_bounds'));
         } else {
-          showToast(t('err_generic'));
+          const errData = await res.json().catch(() => ({}));
+          const errType = errData.error || '';
+
+          if (res.status === 429) {
+            if (errType === 'daily_limit') {
+              showToast(t('err_daily_limit'), 'DAILY_LIMIT');
+            } else {
+              const mins = Math.ceil((errData.retry_after_seconds || 600) / 60);
+              showToast(t('err_rate', { n: mins }), 'RATE_LIMITED');
+            }
+          } else if (res.status === 403) {
+            showToast(t('err_check_failed'), 'CHECK_FAILED');
+          } else if (res.status === 422) {
+            showToast(t('err_bounds'), 'OUT_OF_BOUNDS');
+          } else if (res.status === 400) {
+            showToast(t('err_invalid_request'), 'INVALID_REQUEST');
+          } else if (res.status >= 500) {
+            showToast(t('err_server_problem'), 'SERVER_PROBLEM');
+          } else {
+            showToast(errData.message || t('err_generic'), `ERR_${res.status}`);
+          }
         }
       } catch {
-        enqueueReport(body);
-        showToast(t('offline_saved'));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        enqueueReport(body as any);
+        showToast(t('offline_saved'), 'OFFLINE');
       } finally {
         setIsReporting(false);
+        // Reset turnstile widget for next submission
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const win = typeof window !== 'undefined' ? (window as any) : null;
+        if (win?.turnstile && turnstileWidgetIdRef.current) {
+          try {
+            win.turnstile.reset(turnstileWidgetIdRef.current);
+            turnstileTokenRef.current = null;
+          } catch {
+            // ignore
+          }
+        }
       }
     },
     [fetchMapData, showToast, t]
@@ -350,11 +445,19 @@ function BanangeApp() {
       {toast && (
         <div
           role="alert"
-          className="absolute top-28 left-4 right-4 z-50 mx-auto max-w-sm p-3.5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-2xl backdrop-blur-md text-center text-xs font-medium text-[var(--ink)] animate-pop-in"
+          className="absolute top-28 left-4 right-4 z-50 mx-auto max-w-sm p-3.5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-2xl backdrop-blur-md text-center text-xs font-medium text-[var(--ink)] animate-pop-in flex flex-col items-center gap-1 pointer-events-auto"
         >
-          {toast}
+          <span>{toast.message}</span>
+          {toast.code && (
+            <span className="font-mono text-[10px] tracking-wider text-[var(--muted)] opacity-85 uppercase">
+              [{toast.code}]
+            </span>
+          )}
         </div>
       )}
+
+      {/* Cloudflare Turnstile Invisible Container */}
+      <div id="turnstile-container" className="fixed -bottom-96 -left-96 pointer-events-none opacity-0" aria-hidden="true" />
 
       {/* Map View */}
       <MapView cells={displayedCells} flyToLocation={flyTo} />

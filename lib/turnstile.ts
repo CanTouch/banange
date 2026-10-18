@@ -1,7 +1,7 @@
 export async function verifyTurnstileToken(token?: string, ip?: string): Promise<boolean> {
-  const secret = process.env.TURNSTILE_SECRET;
+  const secret = process.env.TURNSTILE_SECRET?.trim();
   if (!secret) {
-    return true; // Not configured, skip
+    return true; // Not configured, skip verification
   }
 
   if (!token) {
@@ -28,3 +28,4 @@ export async function verifyTurnstileToken(token?: string, ip?: string): Promise
     return false;
   }
 }
+

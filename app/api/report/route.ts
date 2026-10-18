@@ -19,6 +19,19 @@ const reportSchema = z.object({
   turnstile_token: z.string().optional(),
 });
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (isProductionMissingConfig()) {
@@ -27,17 +40,17 @@ export async function POST(req: NextRequest) {
           error: 'server_misconfigured',
           message: 'Database misconfigured: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production.',
         },
-        { status: 500 }
+        { status: 500, headers: corsHeaders }
       );
     }
 
-    const json = await req.json();
+    const json = await req.json().catch(() => null);
     const parsed = reportSchema.safeParse(json);
 
     if (!parsed.success) {
       return NextResponse.json(
         { error: 'invalid_request', message: 'Invalid request payload', details: parsed.error.issues },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -52,16 +65,21 @@ export async function POST(req: NextRequest) {
     ) {
       return NextResponse.json(
         { error: 'out_of_bounds', message: 'Banange only covers Uganda for now.' },
-        { status: 422 }
+        { status: 422, headers: corsHeaders }
       );
     }
 
     // 2. Turnstile bot check
-    const isHuman = await verifyTurnstileToken(turnstile_token);
+    const clientIp =
+      req.headers.get('cf-connecting-ip') ||
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      undefined;
+
+    const isHuman = await verifyTurnstileToken(turnstile_token, clientIp);
     if (!isHuman) {
       return NextResponse.json(
         { error: 'challenge_failed', message: 'Bot verification failed.' },
-        { status: 403 }
+        { status: 403, headers: corsHeaders }
       );
     }
 
@@ -71,7 +89,7 @@ export async function POST(req: NextRequest) {
     // 3. Silent drop if blocked
     const blocked = await store.isBlocked(deviceHash);
     if (blocked) {
-      return NextResponse.json({ ok: true }, { status: 201 });
+      return NextResponse.json({ ok: true }, { status: 201, headers: corsHeaders });
     }
 
     // 4. Rate limit: DAILY_LIMIT in 24 h
@@ -80,7 +98,7 @@ export async function POST(req: NextRequest) {
     if (dailyCount >= DAILY_LIMIT) {
       return NextResponse.json(
         { error: 'daily_limit', message: 'Daily report limit reached. Please try again tomorrow.' },
-        { status: 429 }
+        { status: 429, headers: corsHeaders }
       );
     }
 
@@ -94,7 +112,7 @@ export async function POST(req: NextRequest) {
           message: `You already reported that. Thank you, we've got it. Try again in ${RATE_LIMIT_MINUTES} min.`,
           retry_after_seconds: RATE_LIMIT_MINUTES * 60,
         },
-        { status: 429 }
+        { status: 429, headers: corsHeaders }
       );
     }
 
@@ -123,13 +141,13 @@ export async function POST(req: NextRequest) {
         cell_lat,
         cell_lng,
       },
-      { status: 201 }
+      { status: 201, headers: corsHeaders }
     );
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
       { error: 'server_error', message: 'Internal server error', details: errorMsg },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
