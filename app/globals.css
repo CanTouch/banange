@@ -119,19 +119,25 @@ body {
 
 /* MapLibre popup & controls */
 .maplibregl-ctrl-attrib {
-  background-color: var(--surface) !important;
-  color: var(--muted) !important;
+  background-color: rgba(5, 7, 13, 0.5) !important;
+  color: var(--faint) !important;
   font-family: var(--font-mono), monospace !important;
-  font-size: 10px !important;
-  border: 1px solid var(--border) !important;
+  font-size: 9px !important;
+  border: 1px solid rgba(29, 40, 72, 0.5) !important;
   border-radius: 6px !important;
   padding: 2px 6px !important;
-  margin: 8px !important;
-  backdrop-filter: blur(12px) !important;
+  margin: 6px !important;
+  backdrop-filter: blur(8px) !important;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.maplibregl-ctrl-attrib:hover {
+  opacity: 1;
 }
 
 .maplibregl-ctrl-attrib a {
-  color: var(--ink) !important;
+  color: var(--muted) !important;
   text-decoration: none !important;
 }
 

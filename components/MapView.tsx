@@ -209,7 +209,7 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
           compact: true,
           customAttribution: '© OpenStreetMap contributors · OpenFreeMap',
         }),
-        'bottom-left'
+        'bottom-right'
       );
 
       map.on('load', () => {

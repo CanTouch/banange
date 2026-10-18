@@ -99,7 +99,7 @@ export function LocationPicker({
       if (!isSubscribed || !mapContainerRef.current) return;
 
       const currentTheme = (document.documentElement.getAttribute('data-theme') || 'dark') as 'dark' | 'light';
-      const styled = transformStyle(base, currentTheme);
+      const styled = transformStyle(base, currentTheme, { isPicker: true });
 
       const map = new maplibregl.Map({
         container: mapContainerRef.current,
