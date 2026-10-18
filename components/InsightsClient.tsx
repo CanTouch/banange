@@ -19,6 +19,31 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
   } | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bubbleContainerRef = useRef<HTMLDivElement | null>(null);
+  const [bubbleChartWidth, setBubbleChartWidth] = useState<number>(800);
+
+  useEffect(() => {
+    const el = bubbleContainerRef.current;
+    if (!el) return;
+
+    const updateWidth = () => {
+      if (el) {
+        const w = el.getBoundingClientRect().width;
+        if (w > 0) setBubbleChartWidth(w);
+      }
+    };
+
+    updateWidth();
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = entry.contentRect.width;
+        if (w > 0) setBubbleChartWidth(w);
+      }
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [data]);
 
   const fetchInsights = useCallback(async (selectedDays: 7 | 30) => {
     if (initialData && initialData.range_days === selectedDays && data === initialData) {
@@ -89,6 +114,24 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
       return '0 h';
     }
     return `${hours} h`;
+  };
+
+  // Format short hours for Outage Severity bubble chart
+  const formatShortHours = (hours: number, outages?: number) => {
+    if (hours === 0 && outages && outages > 0) {
+      return '45m';
+    }
+    if (hours <= 0) {
+      return '0m';
+    }
+    if (hours < 1) {
+      return `${Math.round(hours * 60)}m`;
+    }
+    if (hours < 10) {
+      const formatted = hours % 1 === 0 ? hours.toFixed(0) : hours.toFixed(1);
+      return `${formatted}h`;
+    }
+    return `${Math.round(hours)}h`;
   };
 
   // CSV Download
@@ -445,67 +488,165 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
                 </p>
               </div>
 
-              <div className="relative w-full h-56 rounded-xl border border-[var(--border)] bg-[#05070D] overflow-hidden flex items-center justify-center">
-                {/* SVG Faint Dot Grid */}
-                <svg className="absolute inset-0 w-full h-full">
-                  <defs>
-                    <pattern id="dot-grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
-                      <circle cx="2" cy="2" r="1" fill="#1D2848" opacity="0.8" />
-                    </pattern>
-                  </defs>
-                  <rect width="100%" height="100%" fill="url(#dot-grid)" />
+              {(() => {
+                const topAreas = data.ranked_areas.slice(0, 10);
+                if (topAreas.length === 0) {
+                  return (
+                    <div className="py-12 border border-[var(--border)] rounded-xl text-center font-mono text-xs text-[var(--muted)]">
+                      No outage severity data recorded
+                    </div>
+                  );
+                }
 
-                  {/* Red glowing circles for top areas */}
-                  {data.ranked_areas.slice(0, 10).map((area, idx) => {
-                    const cx = 80 + (idx % 5) * 220;
-                    const cy = idx < 5 ? 70 : 160;
-                    const radius = Math.max(10, Math.min(36, 12 + area.hours_dark_estimated * 2));
+                // Layout configuration based on width
+                const w = Math.max(300, bubbleChartWidth || 800);
+                const isMobile = w < 600;
+                const cols = isMobile ? (w < 420 ? 2 : 3) : 5;
+                const maxHours = Math.max(...topAreas.map((a) => a.hours_dark_estimated), 1);
+                const minR = 26;
+                const maxR = 56;
 
-                    return (
-                      <g key={area.name}>
-                        <circle
-                          cx={cx}
-                          cy={cy}
-                          r={radius + 8}
-                          fill="#FF4B4B"
-                          opacity="0.18"
-                        />
-                        <circle
-                          cx={cx}
-                          cy={cy}
-                          r={radius}
-                          fill="#FF4B4B"
-                          stroke="#FFFFFF"
-                          strokeWidth="1"
-                          opacity="0.85"
-                          className="shadow-[0_0_10px_#FF4B4B]"
-                        />
-                        <text
-                          x={cx}
-                          y={cy + radius + 15}
-                          textAnchor="middle"
-                          fill="#E9EEF8"
-                          fontSize="11"
-                          fontFamily="Georgia, serif"
-                        >
-                          {area.name}
-                        </text>
-                        <text
-                          x={cx}
-                          y={cy + 4}
-                          textAnchor="middle"
-                          fill="#05070D"
-                          fontSize="10"
-                          fontFamily="monospace"
-                          fontWeight="bold"
-                        >
-                          {formatHoursText(area.hours_dark_estimated, area.outages)}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
+                const items = topAreas.map((area, idx) => {
+                  const ratio = Math.max(0, Math.min(1, area.hours_dark_estimated / maxHours));
+                  const r = minR + ratio * (maxR - minR);
+                  return { ...area, r, idx };
+                });
+
+                const rowCount = Math.ceil(items.length / cols);
+                const rowHeight = maxR * 2 + 56;
+                const placed: Array<(typeof items)[0] & { cx: number; cy: number }> = [];
+
+                for (let rowIdx = 0; rowIdx < rowCount; rowIdx++) {
+                  const rowItems = items.slice(rowIdx * cols, (rowIdx + 1) * cols);
+                  const cy = 24 + maxR + rowIdx * rowHeight;
+                  const colWidth = w / rowItems.length;
+
+                  const placedRow = rowItems.map((item, colIdx) => ({
+                    ...item,
+                    cx: colWidth * (colIdx + 0.5),
+                    cy,
+                  }));
+
+                  // If two dots are closer than their radii plus 12px, nudge them apart
+                  for (let iter = 0; iter < 12; iter++) {
+                    for (let i = 0; i < placedRow.length - 1; i++) {
+                      const a = placedRow[i];
+                      const b = placedRow[i + 1];
+                      const minDistance = a.r + b.r + 12;
+                      const dist = b.cx - a.cx;
+                      if (dist < minDistance) {
+                        const overlap = minDistance - dist;
+                        a.cx -= overlap / 2;
+                        b.cx += overlap / 2;
+                      }
+                    }
+                  }
+
+                  // Clamp within container with margin so nothing is clipped
+                  const leftPad = placedRow[0].r + 14;
+                  const rightPad = w - (placedRow[placedRow.length - 1].r + 14);
+                  if (placedRow[0].cx < leftPad) {
+                    const shift = leftPad - placedRow[0].cx;
+                    placedRow.forEach((it) => (it.cx += shift));
+                  }
+                  const lastItem = placedRow[placedRow.length - 1];
+                  if (lastItem.cx > rightPad) {
+                    const shift = lastItem.cx - rightPad;
+                    placedRow.forEach((it) => (it.cx -= shift));
+                  }
+
+                  placed.push(...placedRow);
+                }
+
+                const totalSvgHeight = rowCount * rowHeight + 16;
+
+                return (
+                  <div
+                    ref={bubbleContainerRef}
+                    className="relative w-full rounded-xl border border-[var(--border)] bg-[#05070D] overflow-hidden"
+                    style={{ minHeight: `${totalSvgHeight}px` }}
+                  >
+                    <svg
+                      className="w-full h-full block"
+                      viewBox={`0 0 ${w} ${totalSvgHeight}`}
+                      style={{ width: '100%', height: `${totalSvgHeight}px` }}
+                    >
+                      <defs>
+                        <pattern id="dot-grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+                          <circle cx="2" cy="2" r="1" fill="#1D2848" opacity="0.8" />
+                        </pattern>
+                        {/* Soft red outer glow: rgba(255,75,75,0.45), blur 14px */}
+                        <filter id="soft-red-glow" x="-50%" y="-50%" width="200%" height="200%">
+                          <feDropShadow
+                            dx="0"
+                            dy="0"
+                            stdDeviation="14"
+                            floodColor="rgba(255, 75, 75, 0.45)"
+                          />
+                        </filter>
+                      </defs>
+                      <rect width="100%" height="100%" fill="url(#dot-grid)" />
+
+                      {placed.map((item) => {
+                        const label = formatShortHours(item.hours_dark_estimated, item.outages);
+                        // Font size: 12px default, shrink to 10px if label length > 4 and r is close to minimum
+                        const fontSize = label.length > 4 && item.r <= 28 ? 10 : 12;
+
+                        return (
+                          <g key={item.name}>
+                            {/* Dot with fill #FF4B4B at 85% opacity, 1px lighter ring (#FFA3A3), and soft red glow */}
+                            <circle
+                              cx={item.cx}
+                              cy={item.cy}
+                              r={item.r}
+                              fill="#FF4B4B"
+                              fillOpacity="0.85"
+                              stroke="#FFA3A3"
+                              strokeWidth="1"
+                              filter="url(#soft-red-glow)"
+                            />
+
+                            {/* Hours text: white #FFFFFF, IBM Plex Mono, 12px (or 10px fallback), weight 600, centred both ways */}
+                            <text
+                              x={item.cx}
+                              y={item.cy}
+                              textAnchor="middle"
+                              dominantBaseline="central"
+                              fill="#FFFFFF"
+                              fontFamily="var(--font-mono), 'IBM Plex Mono', monospace"
+                              fontWeight="600"
+                              fontSize={fontSize}
+                              style={{
+                                paintOrder: 'stroke fill',
+                                stroke: '#05070D',
+                                strokeWidth: 2,
+                                strokeLinejoin: 'round',
+                                textShadow: '0 0 6px rgba(5, 7, 13, 0.9)',
+                              }}
+                            >
+                              {label}
+                            </text>
+
+                            {/* Area name: white #E9EEF8, Hanken Grotesk 12px, centred 8px below the dot */}
+                            <text
+                              x={item.cx}
+                              y={item.cy + item.r + 8}
+                              textAnchor="middle"
+                              dominantBaseline="hanging"
+                              fill="#E9EEF8"
+                              fontFamily="var(--font-sans), 'Hanken Grotesk', system-ui, sans-serif"
+                              fontSize="12"
+                              fontWeight="500"
+                            >
+                              {item.name}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* 4. Heatmap Grid: Area x Day */}
