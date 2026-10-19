@@ -1,5 +1,6 @@
 import { CONFIRM_MIN_DEVICES, CONFIRM_WINDOW_MIN, GRID_SIZE_DEG, OUT_TTL_HOURS, RECENT_RESTORE_HOURS } from './constants';
 import { neighbours, parseCell } from './cells';
+import { findDistrict, isInsideGreaterKampala } from './areas';
 import { Report } from './store';
 
 export type Episode = {
@@ -90,31 +91,75 @@ export function computeState(
     }
   }
 
+  const cellDistrictCache = new Map<string, string>();
+  function getCellDistrict(cid: string): string {
+    let d = cellDistrictCache.get(cid);
+    if (!d) {
+      const { ix, iy } = parseCell(cid);
+      d = findDistrict(ix * GRID_SIZE_DEG, iy * GRID_SIZE_DEG);
+      cellDistrictCache.set(cid, d);
+    }
+    return d;
+  }
+
+  function isCellInKampala(cid: string): boolean {
+    const { ix, iy } = parseCell(cid);
+    const lat = ix * GRID_SIZE_DEG;
+    const lng = iy * GRID_SIZE_DEG;
+    if (isInsideGreaterKampala(lat, lng)) return true;
+    return getCellDistrict(cid).toLowerCase() === 'kampala';
+  }
+
   function evaluateConfirmation(cellId: string, currentEventTimeMs: number) {
-    const neighs = neighbours(cellId);
-    // Find all distinct devices in open episodes in the 3x3 neighborhood with out reports in window
     const windowStart = currentEventTimeMs - confirmWindowMs;
+    const inKampala = isCellInKampala(cellId);
 
-    // Check confirmation for all open episodes in the 3x3 neighborhood
-    for (const c of neighs) {
-      const ep = openEpisodes.get(c);
-      if (!ep) continue;
-      if (ep.confirmed) continue;
+    if (inKampala) {
+      const neighs = neighbours(cellId);
+      // Check confirmation for all open episodes in the 3x3 neighborhood
+      for (const c of neighs) {
+        const ep = openEpisodes.get(c);
+        if (!ep) continue;
+        if (ep.confirmed) continue;
 
-      const cNeighs = neighbours(c);
-      const devicesInWindow = new Set<string>();
-      for (const n of cNeighs) {
-        const nEp = openEpisodes.get(n);
-        if (!nEp) continue;
-        for (const outRep of nEp.outReports) {
-          if (outRep.time >= windowStart && outRep.time <= currentEventTimeMs) {
-            devicesInWindow.add(outRep.device);
+        const cNeighs = neighbours(c);
+        const devicesInWindow = new Set<string>();
+        for (const n of cNeighs) {
+          const nEp = openEpisodes.get(n);
+          if (!nEp) continue;
+          for (const outRep of nEp.outReports) {
+            if (outRep.time >= windowStart && outRep.time <= currentEventTimeMs) {
+              devicesInWindow.add(outRep.device);
+            }
+          }
+        }
+
+        if (devicesInWindow.size >= CONFIRM_MIN_DEVICES) {
+          ep.confirmed = true;
+        }
+      }
+    } else {
+      // Outside Kampala: density is lower.
+      // Confirm an outage when 3 different devices report within the same district within 30 minutes.
+      const district = getCellDistrict(cellId);
+      const districtOpenEpisodes: OpenEpisode[] = [];
+      const devicesInDistrict = new Set<string>();
+
+      for (const ep of openEpisodes.values()) {
+        if (getCellDistrict(ep.cell_id) === district) {
+          districtOpenEpisodes.push(ep);
+          for (const outRep of ep.outReports) {
+            if (outRep.time >= windowStart && outRep.time <= currentEventTimeMs) {
+              devicesInDistrict.add(outRep.device);
+            }
           }
         }
       }
 
-      if (devicesInWindow.size >= CONFIRM_MIN_DEVICES) {
-        ep.confirmed = true;
+      if (devicesInDistrict.size >= CONFIRM_MIN_DEVICES) {
+        for (const ep of districtOpenEpisodes) {
+          ep.confirmed = true;
+        }
       }
     }
   }

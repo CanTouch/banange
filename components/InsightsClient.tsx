@@ -8,6 +8,7 @@ import { InsightsData } from '@/lib/insights';
 export function InsightsClient({ initialData }: { initialData?: InsightsData | null }) {
   const { language, setLanguage } = useI18n();
   const [days, setDays] = useState<7 | 30>((initialData?.range_days as 7 | 30) || 7);
+  const [selectedDistrict, setSelectedDistrict] = useState<string>('all');
   const [data, setData] = useState<InsightsData | null>(initialData || null);
   const [loading, setLoading] = useState<boolean>(!initialData);
   const [error, setError] = useState<string | null>(null);
@@ -55,29 +56,38 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const fetchInsights = useCallback(async (selectedDays: 7 | 30) => {
-    if (initialData && initialData.range_days === selectedDays && data === initialData) {
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/insights?days=${selectedDays}`);
-      if (!res.ok) throw new Error('Failed to load insights data');
-      const json: InsightsData = await res.json();
-      setData(json);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  }, [initialData, data]);
+  const fetchInsights = useCallback(
+    async (selectedDays: 7 | 30, districtFilter: string = selectedDistrict) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const url =
+          districtFilter === 'all'
+            ? `/api/insights?days=${selectedDays}`
+            : `/api/insights?days=${selectedDays}&district=${encodeURIComponent(districtFilter)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to load insights data');
+        const json: InsightsData = await res.json();
+        setData(json);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [selectedDistrict]
+  );
 
+  const initialRenderRef = useRef(true);
   useEffect(() => {
-    if (!initialData || days !== initialData.range_days) {
-      fetchInsights(days);
+    if (initialRenderRef.current) {
+      initialRenderRef.current = false;
+      if (initialData && days === initialData.range_days && selectedDistrict === 'all') {
+        return;
+      }
     }
-  }, [days, fetchInsights, initialData]);
+    fetchInsights(days, selectedDistrict);
+  }, [days, selectedDistrict, fetchInsights, initialData]);
 
   // Format Kampala EAT datetime
   const formatEAT = (isoStr: string | null) => {
@@ -147,19 +157,21 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
   // CSV Download
   const downloadCSV = () => {
     if (!data) return;
-    const header = 'area,date,outages,hours_dark_estimated\n';
+    const header = 'district,area,date,outages,hours_dark_estimated\n';
     const rows: string[] = [];
 
     data.heatmap.rows.forEach((r) => {
+      const dist = (r.district || '').replace(/"/g, '""');
       r.days.forEach((d) => {
-        rows.push(`"${r.area.replace(/"/g, '""')}","${d.date}",${d.outages},${d.hours_dark_estimated}`);
+        rows.push(`"${dist}","${r.area.replace(/"/g, '""')}","${d.date}",${d.outages},${d.hours_dark_estimated}`);
       });
     });
 
     const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(header + rows.join('\n'));
     const link = document.createElement('a');
     link.setAttribute('href', csvContent);
-    link.setAttribute('download', `banange-outages-${days}d.csv`);
+    const suffix = selectedDistrict !== 'all' ? `-${selectedDistrict.toLowerCase()}` : '';
+    link.setAttribute('download', `banange-outages${suffix}-${days}d.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -342,7 +354,29 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
             </p>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 flex-wrap gap-2">
+            {/* District Filter Dropdown */}
+            <div className="flex items-center">
+              <select
+                aria-label="Filter by district"
+                value={selectedDistrict}
+                onChange={(e) => {
+                  const d = e.target.value;
+                  setSelectedDistrict(d);
+                }}
+                className="font-mono text-xs px-3 py-2 rounded-lg bg-[var(--surface)] hover:bg-[var(--surface)]/90 border border-[var(--border)] text-[var(--ink)] focus:outline-none focus:border-[#FF4B4B] transition-all cursor-pointer"
+              >
+                <option value="all">All Uganda</option>
+                {Array.from(new Set(['Kampala', ...(data?.districts || [])]))
+                  .sort()
+                  .map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
             <button
               type="button"
               onClick={downloadCSV}

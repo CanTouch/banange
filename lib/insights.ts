@@ -2,7 +2,7 @@ import { getStore, isDemoMode } from './store';
 import { computeState } from './states';
 import { parseCell } from './cells';
 import { GRID_SIZE_DEG } from './constants';
-import { nearestArea } from './areas';
+import { findDistrict, nearestArea } from './areas';
 
 export interface SummaryData {
   total_outages: number;
@@ -12,6 +12,7 @@ export interface SummaryData {
 }
 
 export interface RankedArea {
+  district: string;
   name: string;
   outages: number;
   hours_dark_estimated: number;
@@ -24,6 +25,7 @@ export interface HeatmapDay {
 }
 
 export interface HeatmapRow {
+  district: string;
   area: string;
   days: HeatmapDay[];
 }
@@ -32,6 +34,8 @@ export interface InsightsData {
   range_days: number;
   generated_at: string;
   demo_mode?: boolean;
+  selected_district?: string;
+  districts?: string[];
   summary: SummaryData;
   ranked_areas: RankedArea[];
   heatmap: {
@@ -40,7 +44,7 @@ export interface InsightsData {
   };
 }
 
-export async function getInsightsData(days: 7 | 30 = 7): Promise<InsightsData> {
+export async function getInsightsData(days: 7 | 30 = 7, filterDistrict?: string): Promise<InsightsData> {
   const store = getStore();
   const now = new Date();
   const sinceMs = now.getTime() - days * 24 * 60 * 60 * 1000;
@@ -58,15 +62,6 @@ export async function getInsightsData(days: 7 | 30 = 7): Promise<InsightsData> {
     return epStart >= sinceMs || (ep.end && new Date(ep.end).getTime() >= sinceMs);
   });
 
-  let totalOutages = inRangeEpisodes.length;
-  let totalHoursDark = 0;
-  let lastOutageTime: string | null = null;
-
-  const areaStatsMap = new Map<
-    string,
-    { name: string; outages: number; hours_dark_estimated: number }
-  >();
-
   const dates: string[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
@@ -76,14 +71,36 @@ export async function getInsightsData(days: 7 | 30 = 7): Promise<InsightsData> {
     }
   }
 
-  const heatmapMap = new Map<string, Map<string, { outages: number; hours: number }>>();
-
-  for (const ep of inRangeEpisodes) {
+  // Pre-calculate district for each episode
+  const allEpisodeDistricts = new Set<string>();
+  const epDetails = inRangeEpisodes.map((ep) => {
     const { ix, iy } = parseCell(ep.cell_id);
     const lat = Number((ix * GRID_SIZE_DEG).toFixed(3));
     const lng = Number((iy * GRID_SIZE_DEG).toFixed(3));
     const area = nearestArea(lat, lng);
+    const district = findDistrict(lat, lng);
+    allEpisodeDistricts.add(district);
+    return { ep, area, district };
+  });
 
+  // Filter by district if requested
+  const filteredDetails =
+    filterDistrict && filterDistrict !== 'all'
+      ? epDetails.filter((item) => item.district.toLowerCase() === filterDistrict.toLowerCase())
+      : epDetails;
+
+  let totalOutages = filteredDetails.length;
+  let totalHoursDark = 0;
+  let lastOutageTime: string | null = null;
+
+  const areaStatsMap = new Map<
+    string,
+    { district: string; name: string; outages: number; hours_dark_estimated: number }
+  >();
+  const areaToDistrict = new Map<string, string>();
+  const heatmapMap = new Map<string, Map<string, { outages: number; hours: number }>>();
+
+  for (const { ep, area, district } of filteredDetails) {
     const hours = ep.durationHoursEstimated;
     totalHoursDark += hours;
 
@@ -91,9 +108,11 @@ export async function getInsightsData(days: 7 | 30 = 7): Promise<InsightsData> {
       lastOutageTime = ep.start;
     }
 
+    areaToDistrict.set(area, district);
+
     let stat = areaStatsMap.get(area);
     if (!stat) {
-      stat = { name: area, outages: 0, hours_dark_estimated: 0 };
+      stat = { district, name: area, outages: 0, hours_dark_estimated: 0 };
       areaStatsMap.set(area, stat);
     }
     stat.outages += 1;
@@ -133,6 +152,7 @@ export async function getInsightsData(days: 7 | 30 = 7): Promise<InsightsData> {
       };
     });
     return {
+      district: areaToDistrict.get(area) || 'Kampala',
       area,
       days: daysData,
     };
@@ -142,6 +162,8 @@ export async function getInsightsData(days: 7 | 30 = 7): Promise<InsightsData> {
     range_days: days,
     generated_at: now.toISOString(),
     demo_mode: isDemoMode(),
+    selected_district: filterDistrict || 'all',
+    districts: Array.from(allEpisodeDistricts).sort(),
     summary: {
       total_outages: totalOutages,
       total_hours_dark_estimated: Math.round(totalHoursDark * 10) / 10,

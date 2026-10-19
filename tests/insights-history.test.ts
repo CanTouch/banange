@@ -57,6 +57,23 @@ describe('Insights and History APIs', () => {
     expect(data.heatmap).toBeDefined();
     expect(Array.isArray(data.heatmap.dates)).toBe(true);
     expect(Array.isArray(data.heatmap.rows)).toBe(true);
+    if (data.heatmap.rows.length > 0) {
+      expect(typeof data.heatmap.rows[0].district).toBe('string');
+      expect(typeof data.heatmap.rows[0].area).toBe('string');
+    }
+  });
+
+  it('GET /api/insights supports district filtering and returns district information', async () => {
+    const req = new NextRequest('http://localhost:3000/api/insights?days=7&district=Kampala');
+    const res = await getInsights(req);
+    expect(res.status).toBe(200);
+
+    const data = await res.json();
+    expect(data.selected_district).toBe('Kampala');
+    expect(Array.isArray(data.districts)).toBe(true);
+    if (data.ranked_areas.length > 0) {
+      expect(data.ranked_areas.every((a: { district?: string }) => a.district?.toLowerCase() === 'kampala')).toBe(true);
+    }
   });
 
   // (a) Pure function that maps slider time to the nearest frame

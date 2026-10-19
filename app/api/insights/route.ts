@@ -8,8 +8,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const daysParam = parseInt(searchParams.get('days') || '7', 10);
     const days = daysParam === 30 ? 30 : 7;
+    const districtParam = searchParams.get('district') || undefined;
 
-    const data = await getInsightsData(days);
+    const data = await getInsightsData(days, districtParam);
 
     return NextResponse.json(data, {
       status: 200,

@@ -219,4 +219,90 @@ describe('states machine logic', () => {
     const res3 = computeState([repOut, repBack], new Date('2026-10-17T13:05:00Z'), new Set());
     expect(res3.cells.length).toBe(0);
   });
+
+  describe('Rural confirmation outside Kampala', () => {
+    // Karenga coordinates: ~ (3.71, 33.77), (3.65, 33.80), (3.75, 33.72)
+    const karengaCell1 = latLngToCell(3.71, 33.77);
+    const karengaCell2 = latLngToCell(3.65, 33.80);
+    const karengaCell3 = latLngToCell(3.75, 33.72);
+
+    it('single device in Karenga stays unconfirmed (lighter dot)', () => {
+      const rep = createReport({
+        cell_id: karengaCell1.cell_id,
+        cell_lat: karengaCell1.cell_lat,
+        cell_lng: karengaCell1.cell_lng,
+        area_name: 'Karenga district',
+        device_hash: 'kar-dev-1',
+        created_at: baseTime.toISOString(),
+      });
+
+      const { cells } = computeState([rep], baseTime, new Set());
+      expect(cells.length).toBe(1);
+      expect(cells[0].confirmed).toBe(false);
+      expect(cells[0].reporters).toBe(1);
+    });
+
+    it('3 different devices in different grid cells in Karenga district within 30 min confirm the outage', () => {
+      const t0 = new Date(baseTime.getTime() - 20 * 60 * 1000);
+      const t1 = new Date(baseTime.getTime() - 15 * 60 * 1000);
+      const t2 = new Date(baseTime.getTime() - 5 * 60 * 1000);
+
+      const rep1 = createReport({
+        cell_id: karengaCell1.cell_id,
+        cell_lat: karengaCell1.cell_lat,
+        cell_lng: karengaCell1.cell_lng,
+        area_name: 'Karenga district',
+        device_hash: 'kar-dev-1',
+        created_at: t0.toISOString(),
+      });
+
+      const rep2 = createReport({
+        cell_id: karengaCell2.cell_id,
+        cell_lat: karengaCell2.cell_lat,
+        cell_lng: karengaCell2.cell_lng,
+        area_name: 'Karenga district',
+        device_hash: 'kar-dev-2',
+        created_at: t1.toISOString(),
+      });
+
+      // Initially only 2 devices -> both unconfirmed
+      const stateBefore = computeState([rep1, rep2], t1, new Set());
+      expect(stateBefore.cells.every((c) => !c.confirmed)).toBe(true);
+
+      const rep3 = createReport({
+        cell_id: karengaCell3.cell_id,
+        cell_lat: karengaCell3.cell_lat,
+        cell_lng: karengaCell3.cell_lng,
+        area_name: 'Karenga district',
+        device_hash: 'kar-dev-3',
+        created_at: t2.toISOString(),
+      });
+
+      // 3rd device arrives -> all cells in Karenga district confirmed!
+      const stateAfter = computeState([rep1, rep2, rep3], baseTime, new Set());
+      expect(stateAfter.cells.length).toBe(3);
+      expect(stateAfter.cells.every((c) => c.confirmed)).toBe(true);
+    });
+
+    it('3 reports from the same device in Karenga do NOT confirm (requires 3 distinct devices)', () => {
+      const rep1 = createReport({
+        cell_id: karengaCell1.cell_id,
+        device_hash: 'same-dev',
+        created_at: new Date(baseTime.getTime() - 20 * 60 * 1000).toISOString(),
+      });
+      const rep2 = createReport({
+        cell_id: karengaCell2.cell_id,
+        device_hash: 'same-dev',
+        created_at: new Date(baseTime.getTime() - 15 * 60 * 1000).toISOString(),
+      });
+      const rep3 = createReport({
+        cell_id: karengaCell3.cell_id,
+        device_hash: 'same-dev',
+        created_at: new Date(baseTime.getTime() - 5 * 60 * 1000).toISOString(),
+      });
+
+      const state = computeState([rep1, rep2, rep3], baseTime, new Set());
+      expect(state.cells.every((c) => !c.confirmed)).toBe(true);
+    });
+  });
 });

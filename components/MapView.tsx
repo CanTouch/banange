@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
-import { DEFAULT_ZOOM, UGANDA_BOUNDS, UGANDA_CENTER } from '@/lib/constants';
+import { DEFAULT_ZOOM, KAMPALA_CENTER, UGANDA_BOUNDS, UGANDA_CENTER, UGANDA_ZOOM } from '@/lib/constants';
 import { fetchBaseStyle, transformStyle } from '@/lib/mapStyle';
 import { CellOut } from '@/lib/states';
 import { useLiteMode } from '@/lib/liteMode';
@@ -21,6 +21,26 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
   const cellsRef = useRef<Array<CellOut & { area?: string }>>(cells);
   const pulseAnimRef = useRef<number | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const [mapScope, setMapScope] = useState<'kampala' | 'uganda'>('kampala');
+
+  const handleJump = (scope: 'kampala' | 'uganda') => {
+    setMapScope(scope);
+    const map = mapRef.current;
+    if (!map) return;
+    if (scope === 'kampala') {
+      map.flyTo({
+        center: [KAMPALA_CENTER.lng, KAMPALA_CENTER.lat],
+        zoom: DEFAULT_ZOOM,
+        essential: true,
+      });
+    } else {
+      map.flyTo({
+        center: [UGANDA_CENTER.lng, UGANDA_CENTER.lat],
+        zoom: UGANDA_ZOOM,
+        essential: true,
+      });
+    }
+  };
 
   const { isLite } = useLiteMode();
   const isLiteRef = useRef(isLite);
@@ -195,7 +215,7 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
       const map = new maplibregl.Map({
         container: mapContainerRef.current,
         style: styled,
-        center: [UGANDA_CENTER.lng, UGANDA_CENTER.lat],
+        center: [KAMPALA_CENTER.lng, KAMPALA_CENTER.lat],
         zoom: DEFAULT_ZOOM,
         minZoom: 5,
         maxZoom: 16,
@@ -203,6 +223,7 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
         cooperativeGestures: false,
         attributionControl: false,
       });
+      mapRef.current = map;
 
       map.addControl(
         new maplibregl.AttributionControl({
@@ -334,6 +355,34 @@ export function MapView({ cells, flyToLocation }: MapViewProps) {
           background: 'var(--vignette)',
         }}
       />
+
+      {/* Quick-jump toggle: Kampala / All Uganda */}
+      <div className="absolute top-20 right-5 z-20 flex items-center bg-[var(--surface)]/90 backdrop-blur-md border border-[var(--border)] rounded-full p-0.5 shadow-lg pointer-events-auto">
+        <button
+          type="button"
+          onClick={() => handleJump('kampala')}
+          className={`px-3 py-1 text-xs font-mono rounded-full transition-all cursor-pointer ${
+            mapScope === 'kampala'
+              ? 'bg-[#FF4B4B] text-white shadow-sm font-semibold'
+              : 'text-[var(--muted)] hover:text-[var(--ink)]'
+          }`}
+          aria-label="View Kampala"
+        >
+          Kampala
+        </button>
+        <button
+          type="button"
+          onClick={() => handleJump('uganda')}
+          className={`px-3 py-1 text-xs font-mono rounded-full transition-all cursor-pointer ${
+            mapScope === 'uganda'
+              ? 'bg-[#FF4B4B] text-white shadow-sm font-semibold'
+              : 'text-[var(--muted)] hover:text-[var(--ink)]'
+          }`}
+          aria-label="View All Uganda"
+        >
+          All Uganda
+        </button>
+      </div>
     </div>
   );
 }

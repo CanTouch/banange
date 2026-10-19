@@ -23,4 +23,10 @@ export const UGANDA_CENTER = {
   lng: 32.29,
 };
 
-export const DEFAULT_ZOOM = 6.5;
+export const KAMPALA_CENTER = {
+  lat: 0.3476,
+  lng: 32.5825,
+};
+
+export const DEFAULT_ZOOM = 12.5;
+export const UGANDA_ZOOM = 6.8;
