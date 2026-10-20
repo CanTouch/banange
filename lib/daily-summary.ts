@@ -41,41 +41,37 @@ export async function updateTodayOutageDailySummary(supabase: SupabaseClient, no
 
     let notices = todayAlerts.length;
     let matchedPlacesCount = 0;
-    let customerHoursLow = 0;
-    let customerHoursHigh = 0;
     let rowsCounted = 0;
     let rowsExcluded = 0;
+    let areaHours = 0;
 
-    const avgKw = DEFAULT_COST_CONSTANTS.avg_kw_per_customer.value; // 0.17
+    const distinctAreas = new Set<string>();
+    for (const a of todayAlerts) {
+      for (const areaStr of a.areas) {
+        const cleaned = areaStr.trim();
+        if (cleaned) distinctAreas.add(cleaned.toLowerCase());
+      }
+    }
 
     for (const p of processed) {
-      // Cost model does NOT depend on map matching: use total_areas (all listed areas)
+      // Measured area-hours: total_areas x duration_hours
       const areasCount = Math.max(1, p.total_areas);
       matchedPlacesCount += p.matched_places.length;
 
       if (p.duration_hours !== null && (p.duration_type === 'exact' || p.duration_type === 'running')) {
         rowsCounted++;
-        // Low: 500 customers per area; High: 2000 customers per area
-        const chLow = areasCount * 500 * p.duration_hours;
-        const chHigh = areasCount * 2000 * p.duration_hours;
-        customerHoursLow += chLow;
-        customerHoursHigh += chHigh;
+        areaHours += areasCount * p.duration_hours;
       } else {
         rowsExcluded++;
       }
     }
 
-    const kwhLow = customerHoursLow * avgKw;
-    const kwhHigh = customerHoursHigh * avgKw;
-
     await supabase.from('outage_daily_summary').upsert({
       date: kampalaDateStr,
       notices,
       matched_places: matchedPlacesCount,
-      customer_hours_low: Number(customerHoursLow.toFixed(2)),
-      customer_hours_high: Number(customerHoursHigh.toFixed(2)),
-      kwh_low: Number(kwhLow.toFixed(2)),
-      kwh_high: Number(kwhHigh.toFixed(2)),
+      area_hours: Number(areaHours.toFixed(2)),
+      distinct_areas: distinctAreas.size,
       rows_counted: rowsCounted,
       rows_excluded: rowsExcluded,
       created_at: now.toISOString(),

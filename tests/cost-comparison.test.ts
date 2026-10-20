@@ -39,13 +39,39 @@ describe('Cost Arithmetic', () => {
     expect(result.economic_value_floor_ugx).toBe(21600 * 2 * 3700);
   });
 
-  it('has DEFAULT_COST_CONSTANTS configured with 0.17 kW and verified metadata', async () => {
+  it('has DEFAULT_COST_CONSTANTS configured with ERA statistics and SAIDI metadata', async () => {
     const { DEFAULT_COST_CONSTANTS } = await import('../lib/cost');
-    expect(DEFAULT_COST_CONSTANTS.avg_kw_per_customer.value).toBe(0.17);
-    expect(DEFAULT_COST_CONSTANTS.avg_kw_per_customer.source_name).toContain('ERA Distribution Statistics');
+    expect(DEFAULT_COST_CONSTANTS.avg_kw_domestic.value).toBe(0.0559);
+    expect(DEFAULT_COST_CONSTANTS.avg_kw_all.value).toBe(0.1706);
+    expect(DEFAULT_COST_CONSTANTS.avg_kw_domestic.source_url).toContain('Distribution_Statistics_Q2_2026_280926.xlsm');
     expect(DEFAULT_COST_CONSTANTS.usd_to_ugx.source_name).toContain('Placeholder, to be updated from Bank of Uganda');
-    expect(DEFAULT_COST_CONSTANTS.tariff_low_ugx_per_kwh.source_url).toContain('monitor.co.ug');
-    expect(DEFAULT_COST_CONSTANTS.generator_usd_per_kwh.source_url).toContain('energyforgrowth.org');
+    expect(DEFAULT_COST_CONSTANTS.usd_to_ugx.source_url).toBe('');
+    expect(DEFAULT_COST_CONSTANTS.assumed_customers_per_place.source_name).toBe('unused, removed from the model');
+    expect(DEFAULT_COST_CONSTANTS.assumed_customers_per_place.source_url).toBe('');
+    expect(DEFAULT_COST_CONSTANTS.uedcl_customers_2025.value).toBe(2487346);
+    expect(DEFAULT_COST_CONSTANTS.uedcl_saidi_low_hours.value).toBe(7.93);
+    expect(DEFAULT_COST_CONSTANTS.uedcl_saidi_high_hours.value).toBe(12.39);
+  });
+
+  it('calculates national SAIDI reliability benchmark correctly', async () => {
+    const { calculateNationalSaidiReliability } = await import('../lib/cost');
+    const result = calculateNationalSaidiReliability();
+
+    // Implied daily customer hours
+    expect(result.implied_customer_hours_low).toBeGreaterThan(640000);
+    expect(result.implied_customer_hours_low).toBeLessThan(660000);
+    expect(result.implied_customer_hours_high).toBeGreaterThan(1000000);
+    expect(result.implied_customer_hours_high).toBeLessThan(1020000);
+
+    // Energy: low (domestic) vs high (all customers)
+    expect(result.daily_unserved_kwh_low).toBeGreaterThan(35000);
+    expect(result.daily_unserved_kwh_low).toBeLessThan(37000);
+    expect(result.daily_unserved_kwh_high).toBeGreaterThan(170000);
+    expect(result.daily_unserved_kwh_high).toBeLessThan(175000);
+
+    // Economic value floor: 2 USD/kWh * 3700 UGX/USD = 7400 UGX/kWh
+    expect(result.economic_value_floor_low_ugx).toBe(result.daily_unserved_kwh_low * 2 * 3700);
+    expect(result.economic_value_floor_high_ugx).toBe(result.daily_unserved_kwh_high * 2 * 3700);
   });
 });
 
