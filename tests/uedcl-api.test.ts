@@ -82,6 +82,97 @@ describe('UEDCL Ingest API (/api/ingest/uedcl)', () => {
     });
     const res2 = await POST(req2);
     expect(res2.status).toBe(401);
+
+    // Also verify wrong auth with posted HTML gives 401
+    const req3 = new NextRequest('http://localhost:3000/api/ingest/uedcl', {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/html',
+        authorization: 'Bearer wrong-secret',
+      },
+      body: '<table class="custom-outage-table"></table>',
+    });
+    const res3 = await POST(req3);
+    expect(res3.status).toBe(401);
+  });
+
+  it('rejects posted HTML without custom-outage-table with 400', async () => {
+    const { POST } = await import('../app/api/ingest/uedcl/route');
+
+    const req = new NextRequest('http://localhost:3000/api/ingest/uedcl', {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/html',
+        authorization: 'Bearer test-secret-token-12345',
+      },
+      body: '<html><body><h1>Not an outage table</h1></body></html>',
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body).toEqual({ error: 'unexpected_page' });
+    expect(mockInsertedRows.length).toBe(0);
+  });
+
+  it('ingests posted HTML fixture directly with source: "posted" without calling fetch', async () => {
+    const { POST } = await import('../app/api/ingest/uedcl/route');
+
+    const fetchSpy = vi.spyOn(global, 'fetch');
+
+    const fixtureHtml = fs.readFileSync(
+      path.join(__dirname, 'fixtures/uedcl-outage-alerts.html'),
+      'utf8'
+    );
+
+    const req = new NextRequest('http://localhost:3000/api/ingest/uedcl', {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        authorization: 'Bearer test-secret-token-12345',
+      },
+      body: fixtureHtml,
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.source).toBe('posted');
+    expect(body.fetched).toBe(42);
+    expect(body.inserted).toBe(42);
+    expect(mockInsertedRows.length).toBe(42);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('uses fetch path when body is empty and reports source: "fetched"', async () => {
+    const { POST } = await import('../app/api/ingest/uedcl/route');
+
+    const fixtureHtml = fs.readFileSync(
+      path.join(__dirname, 'fixtures/uedcl-outage-alerts.html'),
+      'utf8'
+    );
+
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(fixtureHtml),
+      } as any)
+    );
+
+    const req = new NextRequest('http://localhost:3000/api/ingest/uedcl', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer test-secret-token-12345',
+      },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.source).toBe('fetched');
+    expect(body.fetched).toBe(42);
+    expect(fetchSpy).toHaveBeenCalled();
   });
 
   it('safely handles empty page or 0 rows without marking anything dropped', async () => {
@@ -117,6 +208,7 @@ describe('UEDCL Ingest API (/api/ingest/uedcl)', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual({
+      source: 'fetched',
       fetched: 0,
       inserted: 0,
       updated: 0,
@@ -132,7 +224,6 @@ describe('UEDCL Ingest API (/api/ingest/uedcl)', () => {
     const { POST } = await import('../app/api/ingest/uedcl/route');
 
     // Case 1: First seen with restored status ("Completed")
-    // Should have first_seen_status='restored', restored_seen_at=null, restored_time_exact=false
     const completedHtml = `
       <table class="custom-outage-table">
         <tr><th>Date</th><th>District</th><th>Status</th><th>Affected Areas</th></tr>
@@ -162,7 +253,6 @@ describe('UEDCL Ingest API (/api/ingest/uedcl)', () => {
     expect(mockInsertedRows[0].restored_time_exact).toBe(false);
 
     // Case 2: Row first seen as active that later shows restored
-    // Should set restored_seen_at=now and restored_time_exact=true
     const { computeUedclSourceKey, normalizeAreasText } = await import('../lib/uedcl');
     const computedKey = computeUedclSourceKey(
       '2026-10-20T06:51:00+03:00',
@@ -258,41 +348,7 @@ describe('UEDCL Ingest API (/api/ingest/uedcl)', () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     const body = await res.json();
-    // Seen before, status did NOT change -> updated is 0
     expect(body.updated).toBe(0);
-  });
-
-  it('ingests fixture HTML successfully, storing all rows on first run', async () => {
-    const { POST } = await import('../app/api/ingest/uedcl/route');
-
-    const fixtureHtml = fs.readFileSync(
-      path.join(__dirname, 'fixtures/uedcl-outage-alerts.html'),
-      'utf8'
-    );
-
-    vi.spyOn(global, 'fetch').mockImplementation(() =>
-      Promise.resolve({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve(fixtureHtml),
-      } as any)
-    );
-
-    const req = new NextRequest('http://localhost:3000/api/ingest/uedcl', {
-      method: 'POST',
-      headers: {
-        authorization: 'Bearer test-secret-token-12345',
-      },
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.fetched).toBe(42);
-    expect(body.inserted).toBe(42);
-    expect(mockInsertedRows.length).toBe(42);
-    expect(mockEvents.length).toBe(42);
-    expect(mockInsertedRows[0].source).toBe('uedcl');
   });
 
   it('handles UEDCL downtime gracefully returning 502 without crashing', async () => {

@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 const UEDCL_URL = 'https://www.uedcl.co.ug/outage-alerts/';
 const USER_AGENT = 'BananageBot/1.0 (+https://banange.kuppelabs.com; banange@kuppelabs.com)';
 const FETCH_TIMEOUT_MS = 15000;
+const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2 MB
 
 export async function POST(req: NextRequest) {
   // Constant-time compare of Authorization: Bearer <CRON_SECRET>
@@ -27,38 +28,66 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  // Fetch UEDCL HTML with timeout
+  const contentType = (req.headers.get('content-type') || '').toLowerCase();
   let html = '';
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let source: 'posted' | 'fetched' = 'fetched';
 
-    const res = await fetch(UEDCL_URL, {
-      method: 'GET',
-      headers: {
-        'User-Agent': USER_AGENT,
-      },
-      signal: controller.signal,
-      cache: 'no-store',
-    });
-    clearTimeout(timeout);
+  // Check if raw HTML was posted
+  // If request has Content-Type text/html (or starts with text/html), use body
+  if (contentType.includes('text/html')) {
+    try {
+      const rawText = await req.text();
+      if (rawText && rawText.trim().length > 0) {
+        if (Buffer.byteLength(rawText, 'utf8') > MAX_BODY_BYTES) {
+          return NextResponse.json({ error: 'payload_too_large' }, { status: 413 });
+        }
+        if (!rawText.includes('custom-outage-table')) {
+          return NextResponse.json({ error: 'unexpected_page' }, { status: 400 });
+        }
+        html = rawText;
+        source = 'posted';
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[UEDCL Ingest] Failed to read request body: ${message}`);
+      return NextResponse.json({ error: 'invalid_body', message }, { status: 400 });
+    }
+  }
 
-    if (!res.ok) {
-      console.error(`[UEDCL Ingest] Fetch failed with status ${res.status}`);
+  // If no body provided (empty body or not posted HTML), fall back to server-side fetch
+  if (!html) {
+    source = 'fetched';
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+      const res = await fetch(UEDCL_URL, {
+        method: 'GET',
+        headers: {
+          'User-Agent': USER_AGENT,
+        },
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        console.error(`[UEDCL Ingest] Fetch failed with status ${res.status}`);
+        return NextResponse.json(
+          { error: 'uedcl_fetch_failed', status: res.status },
+          { status: 502 }
+        );
+      }
+
+      html = await res.text();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[UEDCL Ingest] Error fetching alerts: ${message}`);
       return NextResponse.json(
-        { error: 'uedcl_fetch_failed', status: res.status },
+        { error: 'uedcl_unavailable', message },
         { status: 502 }
       );
     }
-
-    html = await res.text();
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[UEDCL Ingest] Error fetching alerts: ${message}`);
-    return NextResponse.json(
-      { error: 'uedcl_unavailable', message },
-      { status: 502 }
-    );
   }
 
   // Parse HTML
@@ -81,6 +110,7 @@ export async function POST(req: NextRequest) {
   if (parsedAlerts.length === 0) {
     console.warn('[UEDCL Ingest] 0 alerts parsed from page');
     return NextResponse.json({
+      source,
       fetched: 0,
       inserted: 0,
       updated: 0,
@@ -265,6 +295,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
+      source,
       fetched: parsedAlerts.length,
       inserted,
       updated,
