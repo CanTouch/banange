@@ -19,9 +19,17 @@ export interface WeeklyAreaStat {
   dark_now: boolean;
 }
 
+export interface UnplacedOfficialNotice {
+  service_area: string;
+  areas_raw: string;
+  published_at: string;
+  status_raw: string;
+}
+
 interface AreaSheetProps {
   darkNowList: AreaOutageItem[];
   weeklyList: WeeklyAreaStat[];
+  unplacedNotices?: UnplacedOfficialNotice[];
   onSelectArea: (lat: number, lng: number) => void;
   onReport: (kind: 'out' | 'back') => void;
   isReporting?: boolean;
@@ -29,6 +37,7 @@ interface AreaSheetProps {
 
 export function AreaSheet({
   darkNowList,
+  unplacedNotices = [],
   onSelectArea,
   onReport,
   isReporting = false,
@@ -151,6 +160,47 @@ export function AreaSheet({
           ))
         )}
       </div>
+
+      {/* Unplaced UEDCL Notices */}
+      {unplacedNotices && unplacedNotices.length > 0 && (
+        <div className="mt-3 pt-2.5 border-t border-[var(--border)]/70 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+              Listed by UEDCL, not yet placed on the map
+            </span>
+            <span className="font-mono text-[10px] text-[var(--accent-amber)] font-medium">
+              {unplacedNotices.length} {unplacedNotices.length === 1 ? 'notice' : 'notices'}
+            </span>
+          </div>
+
+          <div
+            className={`overflow-y-auto pr-1 transition-all duration-300 divide-y divide-[var(--border)]/50 ${
+              expandedAll ? 'max-h-[160px]' : 'max-h-[84px]'
+            }`}
+          >
+            {unplacedNotices.map((notice, idx) => (
+              <div
+                key={`${notice.service_area}-${idx}-${notice.published_at}`}
+                className="py-1.5 flex flex-col gap-0.5 text-left"
+              >
+                <div className="flex items-center justify-between text-[11px] font-mono">
+                  <span className="font-semibold text-white tracking-wide">
+                    {notice.service_area}
+                  </span>
+                  <div className="flex items-center space-x-1.5 text-[var(--muted)]">
+                    <span>{formatEATTime(notice.published_at)}</span>
+                    <span>·</span>
+                    <span className="text-[var(--accent-amber)] font-medium">{notice.status_raw}</span>
+                  </div>
+                </div>
+                <div className="text-[12px] font-mono text-[var(--muted)] truncate" title={notice.areas_raw}>
+                  {notice.areas_raw}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 6.d Footer line: "Community reports, not official data" */}
       <p className="font-sans text-[11px] text-[var(--faint)] text-center mt-3 pt-2 border-t border-[var(--border)]/60">

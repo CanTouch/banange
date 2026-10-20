@@ -130,6 +130,45 @@ export async function GET() {
     const darkNowCount = activeDarkCells.length;
     const confirmedNowCount = activeDarkCells.filter((c) => c.confirmed).length;
 
+    // Fetch active or partial official notices that cannot be placed on the map
+    let unplacedNotices: Array<{
+      service_area: string;
+      areas_raw: string;
+      published_at: string;
+      status_raw: string;
+    }> = [];
+
+    try {
+      const { getSupabaseServerClient } = await import('@/lib/supabase-server');
+      const { processOfficialAlerts } = await import('@/lib/official-comparison');
+      const supabase = getSupabaseServerClient();
+      if (supabase) {
+        const { data: alertsData } = await supabase
+          .from('official_alerts')
+          .select('*')
+          .order('published_at', { ascending: false });
+
+        if (alertsData) {
+          const { processed } = processOfficialAlerts(alertsData, now);
+          unplacedNotices = processed
+            .filter(
+              (p) =>
+                (p.alert.status === 'active' || p.alert.status === 'partial') &&
+                !p.is_stale &&
+                p.matched_places.length === 0
+            )
+            .map((p) => ({
+              service_area: p.alert.service_area,
+              areas_raw: p.alert.areas_raw,
+              published_at: p.alert.published_at,
+              status_raw: p.alert.status_raw,
+            }));
+        }
+      }
+    } catch {
+      // Ignore if supabase not configured or fails
+    }
+
     const body = {
       generated_at: now.toISOString(),
       dev_mode: isDevMode(),
@@ -140,6 +179,7 @@ export async function GET() {
         dark_now: darkNowCount,
         confirmed_now: confirmedNowCount,
       },
+      unplaced_notices: unplacedNotices,
     };
 
     return NextResponse.json(body, {

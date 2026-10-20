@@ -179,7 +179,7 @@ export default async function CostPage() {
               <span>National Reliability Benchmark</span>
             </div>
             <h2 className="font-serif text-2xl font-bold text-white">
-              Worked backwards from UEDCL&apos;s reported reliability (Annual Report 2025), not today&apos;s outages
+              Worked backwards from UEDCL&apos;s reported reliability (Annual Report 2025, April to June 2025 only, medium-voltage network, unit assumed monthly), not today&apos;s outages
             </h2>
             <p className="font-mono text-xs text-[var(--muted)] leading-relaxed">
               Because alert-derived customer totals risk overstating local outages, this national estimate works

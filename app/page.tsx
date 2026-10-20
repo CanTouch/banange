@@ -11,7 +11,7 @@ const MapView = dynamic(() => import('@/components/MapView').then((mod) => mod.M
 });
 
 import { BackPrompt } from '@/components/BackPrompt';
-import { AreaSheet, AreaOutageItem, WeeklyAreaStat } from '@/components/AreaSheet';
+import { AreaSheet, AreaOutageItem, WeeklyAreaStat, UnplacedOfficialNotice } from '@/components/AreaSheet';
 import { LocationPicker } from '@/components/LocationPicker';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import { AboutModal } from '@/components/AboutModal';
@@ -32,6 +32,7 @@ function BanangeApp() {
   const [historicalCells, setHistoricalCells] = useState<Array<CellOut & { area?: string }> | null>(null);
   const [historyLabel, setHistoryLabel] = useState<string | null>(null);
   const [weeklyStats, setWeeklyStats] = useState<WeeklyAreaStat[]>([]);
+  const [unplacedNotices, setUnplacedNotices] = useState<UnplacedOfficialNotice[]>([]);
   const [isDev, setIsDev] = useState(false);
   const [isDemo, setIsDemo] = useState(false);
   const [totals, setTotals] = useState<{ dark_now: number; confirmed_now: number } | null>(null);
@@ -114,6 +115,7 @@ function BanangeApp() {
       setCells(data.cells || []);
       setWeeklyStats(data.areas || []);
       setTotals(data.totals || { dark_now: 0, confirmed_now: 0 });
+      setUnplacedNotices(data.unplaced_notices || []);
       setIsDev(Boolean(data.dev_mode));
       setIsDemo(Boolean(data.demo_mode));
       setErrorMessage(null);
@@ -445,6 +447,7 @@ function BanangeApp() {
         <AreaSheet
           darkNowList={darkNowList}
           weeklyList={weeklyStats}
+          unplacedNotices={unplacedNotices}
           onSelectArea={(lat, lng) => {
             setFlyTo({ lat, lng, zoom: 13, timestamp: Date.now() });
           }}
