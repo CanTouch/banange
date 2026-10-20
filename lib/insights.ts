@@ -3,12 +3,14 @@ import { computeState } from './states';
 import { parseCell } from './cells';
 import { GRID_SIZE_DEG } from './constants';
 import { findDistrict, nearestArea } from './areas';
+import { getOutageDurationHours, isOutageActive, isOutageConfirmed, OutageInfo } from './duration';
 
 export interface SummaryData {
   total_outages: number;
   total_hours_dark_estimated: number;
   worst_area: string;
   last_outage_time: string | null;
+  currently_dark: number;
 }
 
 export interface RankedArea {
@@ -44,9 +46,12 @@ export interface InsightsData {
   };
 }
 
-export async function getInsightsData(days: 7 | 30 = 7, filterDistrict?: string): Promise<InsightsData> {
+export async function getInsightsData(
+  days: 7 | 30 = 7,
+  filterDistrict?: string,
+  now: Date = new Date()
+): Promise<InsightsData> {
   const store = getStore();
-  const now = new Date();
   const sinceMs = now.getTime() - days * 24 * 60 * 60 * 1000;
   const sinceIso = new Date(sinceMs).toISOString();
 
@@ -89,9 +94,10 @@ export async function getInsightsData(days: 7 | 30 = 7, filterDistrict?: string)
       ? epDetails.filter((item) => item.district.toLowerCase() === filterDistrict.toLowerCase())
       : epDetails;
 
-  let totalOutages = filteredDetails.length;
+  let totalOutages = 0;
   let totalHoursDark = 0;
   let lastOutageTime: string | null = null;
+  let currentlyDarkCount = 0;
 
   const areaStatsMap = new Map<
     string,
@@ -101,7 +107,27 @@ export async function getInsightsData(days: 7 | 30 = 7, filterDistrict?: string)
   const heatmapMap = new Map<string, Map<string, { outages: number; hours: number }>>();
 
   for (const { ep, area, district } of filteredDetails) {
-    const hours = ep.durationHoursEstimated;
+    const outageInfo: OutageInfo = {
+      area,
+      start: ep.start,
+      lastReport: ep.lastActivity,
+      end: ep.end,
+      endedBy: ep.endedBy,
+      confirmed: ep.confirmed,
+      devices: ep.devices,
+    };
+
+    if (isOutageActive(outageInfo, now)) {
+      currentlyDarkCount += 1;
+    }
+
+    // Exclude unconfirmed outages from the hours total and from the ranking
+    if (!isOutageConfirmed(outageInfo)) {
+      continue;
+    }
+
+    const hours = getOutageDurationHours(outageInfo, now);
+    totalOutages += 1;
     totalHoursDark += hours;
 
     if (!lastOutageTime || new Date(ep.start).getTime() > new Date(lastOutageTime).getTime()) {
@@ -169,6 +195,7 @@ export async function getInsightsData(days: 7 | 30 = 7, filterDistrict?: string)
       total_hours_dark_estimated: Math.round(totalHoursDark * 10) / 10,
       worst_area: worstArea,
       last_outage_time: lastOutageTime,
+      currently_dark: currentlyDarkCount,
     },
     ranked_areas: top15,
     heatmap: {

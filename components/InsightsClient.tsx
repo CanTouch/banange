@@ -157,13 +157,15 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
   // CSV Download
   const downloadCSV = () => {
     if (!data) return;
-    const header = 'district,area,date,outages,hours_dark_estimated\n';
+    const header = 'district,area,date,outages,hours_dark_estimated,duration_hours\n';
     const rows: string[] = [];
 
     data.heatmap.rows.forEach((r) => {
       const dist = (r.district || '').replace(/"/g, '""');
       r.days.forEach((d) => {
-        rows.push(`"${dist}","${r.area.replace(/"/g, '""')}","${d.date}",${d.outages},${d.hours_dark_estimated}`);
+        rows.push(
+          `"${dist}","${r.area.replace(/"/g, '""')}","${d.date}",${d.outages},${d.hours_dark_estimated},${d.hours_dark_estimated}`
+        );
       });
     });
 

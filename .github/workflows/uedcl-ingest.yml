@@ -1,0 +1,16 @@
+name: UEDCL Outage Alerts Ingest
+
+# Free GitHub Actions minutes cannot cover a 15-minute schedule on a private repo.
+# The regular 15-minute schedule runs from the owner's n8n server.
+# workflow_dispatch is kept for manual triggering and testing.
+on:
+  workflow_dispatch:
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger UEDCL Ingest Endpoint
+        run: |
+          curl -fsS -X POST https://banange.kuppelabs.com/api/ingest/uedcl \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

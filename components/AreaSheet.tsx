@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useI18n } from '@/lib/i18n';
+import { getOutageDurationHours } from '@/lib/duration';
 
 export interface AreaOutageItem {
   name: string;
@@ -52,9 +53,9 @@ export function AreaSheet({
 
   const formatDuration = (isoString?: string) => {
     if (!isoString) return '0 m';
-    const diffMs = Math.max(0, Date.now() - new Date(isoString).getTime());
-    const h = Math.floor(diffMs / (3600 * 1000));
-    const m = Math.floor((diffMs % (3600 * 1000)) / (60 * 1000));
+    const hours = getOutageDurationHours({ start: isoString }, undefined, { raw: true });
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
     if (h > 0) {
       return `${h} h ${m} m`;
     }

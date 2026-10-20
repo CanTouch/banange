@@ -21,6 +21,7 @@ import { getClientDeviceId } from '@/lib/device';
 import { enqueueReport, flushOfflineQueue } from '@/lib/offlineQueue';
 import { TimeSlider } from '@/components/TimeSlider';
 import { useLiteMode } from '@/lib/liteMode';
+import { isOutageActive } from '@/lib/duration';
 
 function BanangeApp() {
   const { t } = useI18n();
@@ -317,7 +318,18 @@ function BanangeApp() {
   const displayedCells = historicalCells !== null ? historicalCells : cells;
 
   const darkNowList: AreaOutageItem[] = displayedCells
-    .filter((c) => c.state === 'out')
+    .filter(
+      (c) =>
+        c.state === 'out' &&
+        isOutageActive({
+          area: c.area || 'Uganda',
+          start: c.since,
+          lastReport: c.last_activity,
+          restoredAt: c.restored_at,
+          confirmed: c.confirmed,
+          devices: c.reporters,
+        })
+    )
     .map((c) => ({
       name: c.area || 'Uganda',
       lat: c.lat,

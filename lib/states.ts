@@ -1,6 +1,7 @@
 import { CONFIRM_MIN_DEVICES, CONFIRM_WINDOW_MIN, GRID_SIZE_DEG, OUT_TTL_HOURS, RECENT_RESTORE_HOURS } from './constants';
 import { neighbours, parseCell } from './cells';
 import { findDistrict, isInsideGreaterKampala } from './areas';
+import { getOutageDurationHours } from './duration';
 import { Report } from './store';
 
 export type Episode = {
@@ -71,8 +72,17 @@ export function computeState(
       if (!ep) continue;
       const lastActMs = new Date(ep.lastActivity).getTime();
       if (timeMs - lastActMs > outTtlMs) {
-        const startMs = new Date(ep.start).getTime();
-        const durationHours = Math.max(0, (lastActMs - startMs) / (1000 * 60 * 60));
+        const durationHours = getOutageDurationHours(
+          {
+            start: ep.start,
+            lastReport: ep.lastActivity,
+            endedBy: 'expired',
+            confirmed: ep.confirmed,
+            devices: ep.outDevices.size,
+          },
+          timeMs,
+          { raw: true }
+        );
         const finished: Episode = {
           cell_id: ep.cell_id,
           start: ep.start,
@@ -204,8 +214,18 @@ export function computeState(
         ep.backDevices.add(device);
         const needed = ep.confirmed ? 2 : 1;
         if (ep.backDevices.size >= needed) {
-          const startMs = new Date(ep.start).getTime();
-          const durationHours = Math.max(0, (tMs - startMs) / (1000 * 60 * 60));
+          const durationHours = getOutageDurationHours(
+            {
+              start: ep.start,
+              lastReport: ep.lastActivity,
+              end: r.created_at,
+              endedBy: 'restored',
+              confirmed: ep.confirmed,
+              devices: ep.outDevices.size,
+            },
+            tMs,
+            { raw: true }
+          );
           const finished: Episode = {
             cell_id: ep.cell_id,
             start: ep.start,
@@ -231,8 +251,16 @@ export function computeState(
   // Generate episodes array
   const allEpisodes: Episode[] = [...closedEpisodes];
   for (const ep of openEpisodes.values()) {
-    const startMs = new Date(ep.start).getTime();
-    const durationHours = Math.max(0, (nowMs - startMs) / (1000 * 60 * 60));
+    const durationHours = getOutageDurationHours(
+      {
+        start: ep.start,
+        lastReport: ep.lastActivity,
+        confirmed: ep.confirmed,
+        devices: ep.outDevices.size,
+      },
+      nowMs,
+      { raw: true }
+    );
     allEpisodes.push({
       cell_id: ep.cell_id,
       start: ep.start,
