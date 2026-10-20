@@ -217,8 +217,28 @@ export async function GET() {
       // Ignore if supabase not configured or fails
     }
 
+    // Find the latest ingest / seen timestamp from alerts
+    let latestIngestAt: string | null = null;
+    try {
+      if (officialPlacedPlaces.length > 0 || unplacedNotices.length > 0) {
+        for (const op of officialPlacedPlaces) {
+          if (op.published_at && (!latestIngestAt || new Date(op.published_at).getTime() > new Date(latestIngestAt).getTime())) {
+            latestIngestAt = op.published_at;
+          }
+        }
+        for (const un of unplacedNotices) {
+          if (un.published_at && (!latestIngestAt || new Date(un.published_at).getTime() > new Date(latestIngestAt).getTime())) {
+            latestIngestAt = un.published_at;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     const body = {
       generated_at: now.toISOString(),
+      latest_ingest_at: latestIngestAt,
       dev_mode: isDevMode(),
       demo_mode: isDemoMode(),
       cells: cellsWithArea,

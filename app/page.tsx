@@ -48,6 +48,9 @@ function BanangeApp() {
   const [isDemo, setIsDemo] = useState(false);
   const [totals, setTotals] = useState<{ dark_now: number; confirmed_now: number } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [latestIngestAt, setLatestIngestAt] = useState<string | null>(null);
+  // Feature flag: -7d to Now slider card and Play 24h (off by default)
+  const [showTimeSlider] = useState<boolean>(false);
 
   // Time label: "SUN 18 OCT · 20:14 EAT"
   const [currentTimeLabel, setCurrentTimeLabel] = useState<string>('');
@@ -128,6 +131,7 @@ function BanangeApp() {
       setTotals(data.totals || { dark_now: 0, confirmed_now: 0 });
       setUnplacedNotices(data.unplaced_notices || []);
       setOfficialPlaces(data.official_places || []);
+      setLatestIngestAt(data.latest_ingest_at || null);
       setIsDev(Boolean(data.dev_mode));
       setIsDemo(Boolean(data.demo_mode));
       setErrorMessage(null);
@@ -353,34 +357,32 @@ function BanangeApp() {
     }));
 
   const darkCount = darkNowList.length;
+  // Placed official places count (unique alerts active) + unplaced notices count
+  const uedclCount = new Set([
+    ...officialPlaces.map((op) => op.service_area + op.published_at),
+    ...unplacedNotices.map((un) => un.service_area + un.published_at),
+  ]).size;
 
   return (
     <main className="relative w-screen h-screen overflow-hidden flex flex-col bg-[var(--bg)] text-[var(--ink)] select-none">
       {/* Top Bar */}
       <TopBar isDev={isDev} isDemo={isDemo} onOpenAbout={() => setIsAboutOpen(true)} />
 
-      {/* 4. Status Line & 5. Headline floating on top-left over map */}
-      <div className="absolute top-16 left-5 z-20 pointer-events-none select-none max-w-xs sm:max-w-md animate-fade-in">
-        {/* Status Line: IBM Plex Mono 10px uppercase tracking-[0.14em] text-[var(--muted)] */}
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted)] mb-1">
-          {historyLabel ? historyLabel.toUpperCase() : currentTimeLabel || 'KAMPALA · EAT'}
-        </p>
-
-        {/* Headline: Instrument Serif 54px line-height 0.96 */}
-        <div className="font-serif text-[42px] sm:text-[54px] leading-[0.96] text-[var(--ink)] tracking-tight">
-          {darkCount > 0 ? (
-            <>
-              <div>
-                {darkCount} {darkCount === 1 ? 'area' : 'areas'}
-              </div>
-              <div className="italic text-[var(--muted)]">in the dark</div>
-            </>
-          ) : (
-            <>
-              <div>All lit</div>
-              <div className="italic text-[var(--muted)]">up tonight</div>
-            </>
-          )}
+      {/* 1. Status Chip floating over the map on top-left (below toggle on mobile, top-18 on desktop) */}
+      <div className="absolute top-26 left-4 sm:top-18 sm:left-5 z-20 pointer-events-none select-none max-w-sm sm:max-w-md animate-fade-in">
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[var(--surface)]/90 border border-[var(--border)] shadow-xl backdrop-blur-md">
+          <span
+            className={`w-2 h-2 rounded-full shrink-0 ${
+              darkCount > 0 || uedclCount > 0 ? 'bg-[var(--out)] shadow-[0_0_8px_#FF4B4B]' : 'bg-emerald-400'
+            }`}
+          />
+          <span className="font-mono text-xs font-semibold text-[var(--ink)]">
+            {uedclCount === 0 && darkCount === 0
+              ? 'No outages listed or reported right now'
+              : `${uedclCount} UEDCL ${uedclCount === 1 ? 'notice' : 'notices'} active · ${darkCount} citizen ${
+                  darkCount === 1 ? 'report' : 'reports'
+                }`}
+          </span>
         </div>
       </div>
 
@@ -397,7 +399,7 @@ function BanangeApp() {
           </div>
           <button
             onClick={() => fetchMapData()}
-            className="px-2.5 py-1 rounded-lg bg-red-900 border border-red-700 text-red-100 hover:bg-red-800 text-[11px] font-mono shrink-0 cursor-pointer"
+            className="px-2.5 py-1 rounded-lg bg-red-900 border border-red-700 text-red-100 hover:bg-red-800 text-xs font-mono shrink-0 cursor-pointer"
           >
             Retry
           </button>
@@ -415,7 +417,7 @@ function BanangeApp() {
         >
           <span>{toast.message}</span>
           {toast.code && (
-            <span className="font-mono text-[10px] tracking-wider text-[var(--muted)] opacity-85 uppercase">
+            <span className="font-mono text-xs tracking-wider text-[var(--muted)] opacity-85 uppercase">
               [{toast.code}]
             </span>
           )}
@@ -434,26 +436,29 @@ function BanangeApp() {
         </div>
       )}
 
-      {/* Bottom Area: History Scrubber + Bottom Sheet */}
+      {/* Bottom Area: History Scrubber (feature-flagged) + Bottom Sheet */}
       <div className="absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center pointer-events-none pb-safe">
-        {/* Phase 2: History Scrubber / Time Slider */}
-        <div className="w-full max-w-lg px-3 mb-2 pointer-events-auto">
-          <TimeSlider
-            isLite={isLite}
-            onHistoricalChange={(hCells, isLiveNow, label) => {
-              if (isLiveNow) {
-                isHistoricalRef.current = false;
-                setHistoricalCells(null);
-                setHistoryLabel(null);
-                fetchMapData();
-              } else {
-                isHistoricalRef.current = true;
-                setHistoricalCells(hCells);
-                setHistoryLabel(label || null);
-              }
-            }}
-          />
-        </div>
+        {/* Phase 2: History Scrubber / Time Slider (Hidden behind feature flag, off by default) */}
+        {showTimeSlider && (
+          <div className="w-full max-w-lg px-3 mb-2 pointer-events-auto">
+            <TimeSlider
+              isLite={isLite}
+              latestIngestTime={latestIngestAt}
+              onHistoricalChange={(hCells, isLiveNow, label) => {
+                if (isLiveNow) {
+                  isHistoricalRef.current = false;
+                  setHistoricalCells(null);
+                  setHistoryLabel(null);
+                  fetchMapData();
+                } else {
+                  isHistoricalRef.current = true;
+                  setHistoricalCells(hCells);
+                  setHistoryLabel(label || null);
+                }
+              }}
+            />
+          </div>
+        )}
 
         {/* 6. Bottom Sheet (includes side-by-side buttons, dark now list, and footer) */}
         <AreaSheet

@@ -21,41 +21,6 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
   } | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [bubbleChartWidth, setBubbleChartWidth] = useState<number | null>(null);
-  const containerElRef = useRef<HTMLDivElement | null>(null);
-
-  const bubbleContainerRef = useCallback((el: HTMLDivElement | null) => {
-    containerElRef.current = el;
-    if (!el) return;
-    const update = () => {
-      const w = Math.round(el.getBoundingClientRect().width);
-      if (w > 0) {
-        setBubbleChartWidth(w);
-      }
-    };
-    update();
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const w = Math.round(entry.contentRect.width);
-        if (w > 0) {
-          setBubbleChartWidth(w);
-        }
-      }
-    });
-    observer.observe(el);
-  }, []);
-
-  useEffect(() => {
-    const handleResize = () => {
-      if (containerElRef.current) {
-        const w = Math.round(containerElRef.current.getBoundingClientRect().width);
-        if (w > 0) setBubbleChartWidth(w);
-      }
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const fetchInsights = useCallback(
     async (selectedDays: 7 | 30, districtFilter: string = selectedDistrict) => {
@@ -135,24 +100,6 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
       return '0 h';
     }
     return `${hours} h`;
-  };
-
-  // Format short hours for Outage Severity bubble chart
-  const formatShortHours = (hours: number, outages?: number) => {
-    if (hours === 0 && outages && outages > 0) {
-      return '45m';
-    }
-    if (hours <= 0) {
-      return '0m';
-    }
-    if (hours < 1) {
-      return `${Math.round(hours * 60)}m`;
-    }
-    if (hours < 10) {
-      const formatted = hours % 1 === 0 ? hours.toFixed(0) : hours.toFixed(1);
-      return `${formatted}h`;
-    }
-    return `${Math.round(hours)}h`;
   };
 
   // CSV Download
@@ -297,12 +244,12 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
           </div>
 
           <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* Range Toggle */}
-            <div className="bg-[var(--bg)] border border-[var(--border)] p-0.5 rounded-lg flex font-mono text-xs">
+            {/* Range Toggle - flex-1 / auto so it never overflows */}
+            <div className="bg-[var(--bg)] border border-[var(--border)] p-0.5 rounded-lg flex font-mono text-xs shrink-0">
               <button
                 type="button"
                 onClick={() => setDays(7)}
-                className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                className={`px-2.5 sm:px-3 py-1 rounded-md transition-all cursor-pointer ${
                   days === 7
                     ? 'bg-[var(--surface)] text-[var(--ink)] border border-[var(--border)] font-semibold shadow-sm'
                     : 'text-[var(--muted)] hover:text-[var(--ink)]'
@@ -313,7 +260,7 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
               <button
                 type="button"
                 onClick={() => setDays(30)}
-                className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                className={`px-2.5 sm:px-3 py-1 rounded-md transition-all cursor-pointer ${
                   days === 30
                     ? 'bg-[var(--surface)] text-[var(--ink)] border border-[var(--border)] font-semibold shadow-sm'
                     : 'text-[var(--muted)] hover:text-[var(--ink)]'
@@ -326,7 +273,7 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
             {/* Back to Live Map */}
             <Link
               href="/"
-              className="font-mono text-xs font-semibold px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--faint)] transition-colors flex items-center space-x-1.5"
+              className="font-mono text-xs font-semibold px-2.5 sm:px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--faint)] transition-colors flex items-center space-x-1.5 shrink-0"
             >
               <span>Map</span>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
@@ -336,7 +283,7 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
             <button
               type="button"
               onClick={() => setLanguage(language === 'en' ? 'lg' : 'en')}
-              className="w-8 h-8 rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)] font-mono text-[10px] font-semibold flex items-center justify-center cursor-pointer transition-colors"
+              className="w-8 h-8 rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)] font-mono text-xs font-semibold flex items-center justify-center cursor-pointer transition-colors shrink-0"
             >
               {language.toUpperCase()}
             </button>
@@ -346,10 +293,10 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-5 py-8 flex-1 w-full space-y-8">
-        {/* Title & Action Bar (Clean typography, no red boxes behind headers) */}
+        {/* Title & Action Bar */}
         <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 border-b border-[var(--border)] pb-6">
           <div>
-            <h1 className="font-serif text-[42px] sm:text-[48px] leading-tight text-[var(--ink)] tracking-tight">
+            <h1 className="font-serif text-[38px] sm:text-[48px] leading-tight text-[var(--ink)] tracking-tight">
               Outage Intelligence
             </h1>
             <p className="font-mono text-xs text-[var(--muted)] mt-1 tracking-wide">
@@ -379,30 +326,6 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
                   ))}
               </select>
             </div>
-
-            <button
-              type="button"
-              onClick={downloadCSV}
-              disabled={!data || loading}
-              className="font-mono text-xs px-3.5 py-2 rounded-lg bg-[var(--surface)] hover:bg-[var(--surface)]/90 border border-[var(--border)] text-[var(--ink)] transition-all flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
-            >
-              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              <span>Download CSV</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={downloadShareImage}
-              disabled={!data || loading}
-              className="font-mono text-xs px-3.5 py-2 rounded-lg border border-[var(--out)]/50 bg-[var(--out)]/10 text-[var(--out)] hover:bg-[var(--out)]/20 transition-all flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
-            >
-              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <span>Download share image</span>
-            </button>
           </div>
         </div>
 
@@ -424,54 +347,51 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
           <>
             {/* 1. Stats Row: Instrument Serif 40px numbers and mono small labels */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {/* Total Outages */}
+              {/* Total Outages (duplicate caption removed) */}
               <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] backdrop-blur-md">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                <p className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
                   TOTAL OUTAGES
                 </p>
                 <p className="font-serif text-[40px] leading-tight text-[var(--ink)] mt-1">
                   {data.summary.total_outages}
                 </p>
-                <p className="font-mono text-[11px] text-[var(--faint)] mt-0.5">
-                  {pluralOutages(data.summary.total_outages)}
-                </p>
               </div>
 
               {/* Hours Dark */}
               <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] backdrop-blur-md">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                <p className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
                   HOURS DARK
                 </p>
                 <p className="font-serif text-[40px] leading-tight text-[var(--out)] mt-1">
                   {formatHoursText(data.summary.total_hours_dark_estimated, data.summary.total_outages)}
                 </p>
-                <p className="font-mono text-[11px] text-[var(--faint)] mt-0.5">
+                <p className="font-mono text-xs text-[var(--faint)] mt-0.5">
                   Estimated duration
                 </p>
               </div>
 
               {/* Worst Area */}
               <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] backdrop-blur-md">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                <p className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
                   WORST AREA
                 </p>
-                <p className="font-serif text-[28px] sm:text-[32px] leading-tight text-[var(--back)] mt-1 truncate" title={data.summary.worst_area}>
+                <p className="font-serif text-[28px] sm:text-[32px] leading-tight text-[var(--back)] mt-1 line-clamp-2" title={data.summary.worst_area}>
                   {data.summary.worst_area}
                 </p>
-                <p className="font-mono text-[11px] text-[var(--faint)] mt-0.5">
+                <p className="font-mono text-xs text-[var(--faint)] mt-0.5">
                   Most estimated dark hours
                 </p>
               </div>
 
               {/* Last Outage Time */}
               <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] backdrop-blur-md">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                <p className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
                   LAST OUTAGE TIME
                 </p>
-                <p className="font-mono text-sm sm:text-base font-semibold text-[var(--ink)] mt-2 truncate">
+                <p className="font-mono text-sm sm:text-base font-semibold text-[var(--ink)] mt-2 line-clamp-2">
                   {formatEAT(data.summary.last_outage_time)}
                 </p>
-                <p className="font-mono text-[11px] text-[var(--faint)] mt-0.5">
+                <p className="font-mono text-xs text-[var(--faint)] mt-0.5">
                   Kampala EAT
                 </p>
               </div>
@@ -480,22 +400,18 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
             {/* UEDCL Comparison Section */}
             <UedclComparisonSection />
 
-            {/* 2. Ranked List with thin red glow bars */}
-            <div className="p-5 sm:p-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] backdrop-blur-md space-y-4">
-              <div>
-                <h2 className="font-serif text-2xl text-[var(--ink)] font-normal">
-                  Top 15 Areas by Estimated Hours Dark
-                </h2>
-                <p className="font-mono text-[11px] text-[var(--muted)] mt-0.5">
-                  CUMULATIVE ESTIMATED OUTAGE DURATION OVER THE LAST {days} DAYS
-                </p>
-              </div>
+            {/* 2. Ranked List with thin red glow bars (hidden until it has data) */}
+            {data.ranked_areas.length > 0 && (
+              <div className="p-5 sm:p-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] backdrop-blur-md space-y-4">
+                <div>
+                  <h2 className="font-serif text-2xl text-[var(--ink)] font-normal">
+                    Top 15 Areas by Estimated Hours Dark
+                  </h2>
+                  <p className="font-mono text-xs text-[var(--muted)] mt-0.5">
+                    CUMULATIVE ESTIMATED OUTAGE DURATION OVER THE LAST {days} DAYS
+                  </p>
+                </div>
 
-              {data.ranked_areas.length === 0 ? (
-                <p className="font-mono text-xs text-[var(--muted)] py-6 text-center">
-                  No outages recorded in this period.
-                </p>
-              ) : (
                 <div className="w-full space-y-3 pt-2">
                   {data.ranked_areas.map((item, idx) => {
                     const maxVal = data.ranked_areas[0]?.hours_dark_estimated || 1;
@@ -503,10 +419,10 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
 
                     return (
                       <div key={item.name} className="flex items-center text-xs space-x-3">
-                        <span className="w-5 font-mono text-[11px] text-[var(--faint)] text-right">
+                        <span className="w-5 font-mono text-xs text-[var(--faint)] text-right">
                           {idx + 1}
                         </span>
-                        <span className="w-28 sm:w-36 truncate font-serif text-[19px] leading-tight text-[var(--ink)]" title={item.name}>
+                        <span className="w-28 sm:w-36 font-serif text-[19px] leading-tight text-[var(--ink)] line-clamp-2" title={item.name}>
                           {item.name}
                         </span>
                         {/* Thin red glow bar */}
@@ -518,247 +434,70 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
                         </div>
                         <span className="w-24 text-right font-mono text-xs text-[var(--back)] font-medium">
                           {formatHoursText(item.hours_dark_estimated, item.outages)}{' '}
-                          <span className="text-[10px] text-[var(--faint)]">est</span>
+                          <span className="text-xs text-[var(--faint)]">est</span>
                         </span>
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </div>
-
-            {/* 3. Bubble Chart: Red glowing circles on a faint dot grid */}
-            <div className="p-5 sm:p-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] backdrop-blur-md space-y-4">
-              <div>
-                <h2 className="font-serif text-2xl text-[var(--ink)] font-normal">
-                  Outage Severity Distribution
-                </h2>
-                <p className="font-mono text-[11px] text-[var(--muted)] mt-0.5">
-                  AREAS SIZED BY ESTIMATED DARK HOURS ON FAINT COORDINATE GRID
-                </p>
               </div>
+            )}
 
-              {(() => {
-                const topAreas = data.ranked_areas.slice(0, 10);
-                if (topAreas.length === 0) {
-                  return (
-                    <div className="py-12 border border-[var(--border)] rounded-xl text-center font-mono text-xs text-[var(--muted)]">
-                      No outage severity data recorded
-                    </div>
-                  );
-                }
-
-                // Layout configuration based on width
-                const w = Math.max(300, bubbleChartWidth || 800);
-                const isMobile = w < 600;
-                const cols = isMobile ? (w < 420 ? 2 : 3) : 5;
-                const maxHours = Math.max(...topAreas.map((a) => a.hours_dark_estimated), 1);
-                const minR = 26;
-                const maxR = 56;
-
-                const items = topAreas.map((area, idx) => {
-                  const ratio = Math.max(0, Math.min(1, area.hours_dark_estimated / maxHours));
-                  const r = minR + ratio * (maxR - minR);
-                  return { ...area, r, idx };
-                });
-
-                const rowCount = Math.ceil(items.length / cols);
-                const rowHeight = maxR * 2 + 56;
-                const placed: Array<(typeof items)[0] & { cx: number; cy: number }> = [];
-
-                for (let rowIdx = 0; rowIdx < rowCount; rowIdx++) {
-                  const rowItems = items.slice(rowIdx * cols, (rowIdx + 1) * cols);
-                  const cy = 24 + maxR + rowIdx * rowHeight;
-                  const colWidth = w / rowItems.length;
-
-                  const placedRow = rowItems.map((item, colIdx) => ({
-                    ...item,
-                    cx: colWidth * (colIdx + 0.5),
-                    cy,
-                  }));
-
-                  // If two dots are closer than their radii plus 12px, nudge them apart
-                  for (let iter = 0; iter < 12; iter++) {
-                    for (let i = 0; i < placedRow.length - 1; i++) {
-                      const a = placedRow[i];
-                      const b = placedRow[i + 1];
-                      const minDistance = a.r + b.r + 12;
-                      const dist = b.cx - a.cx;
-                      if (dist < minDistance) {
-                        const overlap = minDistance - dist;
-                        a.cx -= overlap / 2;
-                        b.cx += overlap / 2;
-                      }
-                    }
-                  }
-
-                  // Clamp within container with margin so nothing is clipped
-                  const leftPad = placedRow[0].r + 14;
-                  const rightPad = w - (placedRow[placedRow.length - 1].r + 14);
-                  if (placedRow[0].cx < leftPad) {
-                    const shift = leftPad - placedRow[0].cx;
-                    placedRow.forEach((it) => (it.cx += shift));
-                  }
-                  const lastItem = placedRow[placedRow.length - 1];
-                  if (lastItem.cx > rightPad) {
-                    const shift = lastItem.cx - rightPad;
-                    placedRow.forEach((it) => (it.cx -= shift));
-                  }
-
-                  placed.push(...placedRow);
-                }
-
-                const totalSvgHeight = rowCount * rowHeight + 16;
-
-                return (
-                  <div
-                    ref={bubbleContainerRef}
-                    className="relative w-full rounded-xl border border-[var(--border)] bg-[#05070D] overflow-hidden"
-                    style={{ minHeight: `${totalSvgHeight}px` }}
-                  >
-                    <svg
-                      className="w-full h-full block"
-                      viewBox={`0 0 ${w} ${totalSvgHeight}`}
-                      style={{ width: '100%', height: `${totalSvgHeight}px` }}
-                    >
-                      <defs>
-                        <pattern id="dot-grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
-                          <circle cx="2" cy="2" r="1" fill="#1D2848" opacity="0.8" />
-                        </pattern>
-                        {/* Soft red outer glow: rgba(255,75,75,0.45), blur 14px */}
-                        <filter id="soft-red-glow" x="-50%" y="-50%" width="200%" height="200%">
-                          <feDropShadow
-                            dx="0"
-                            dy="0"
-                            stdDeviation="14"
-                            floodColor="rgba(255, 75, 75, 0.45)"
-                          />
-                        </filter>
-                      </defs>
-                      <rect width="100%" height="100%" fill="url(#dot-grid)" />
-
-                      {placed.map((item) => {
-                        const label = formatShortHours(item.hours_dark_estimated, item.outages);
-                        // Font size: 12px default, shrink to 10px if label length > 4 and r is close to minimum
-                        const fontSize = label.length > 4 && item.r <= 28 ? 10 : 12;
-
-                        return (
-                          <g key={item.name}>
-                            {/* Dot with fill #FF4B4B at 85% opacity, 1px lighter ring (#FFA3A3), and soft red glow */}
-                            <circle
-                              cx={item.cx}
-                              cy={item.cy}
-                              r={item.r}
-                              fill="#FF4B4B"
-                              fillOpacity="0.85"
-                              stroke="#FFA3A3"
-                              strokeWidth="1"
-                              filter="url(#soft-red-glow)"
-                            />
-
-                            {/* Hours text: white #FFFFFF, IBM Plex Mono, 12px (or 10px fallback), weight 600, centred both ways */}
-                            <text
-                              x={item.cx}
-                              y={item.cy}
-                              textAnchor="middle"
-                              dominantBaseline="central"
-                              fill="#FFFFFF"
-                              fontFamily="var(--font-mono), 'IBM Plex Mono', monospace"
-                              fontWeight="600"
-                              fontSize={fontSize}
-                              style={{
-                                paintOrder: 'stroke fill',
-                                stroke: '#05070D',
-                                strokeWidth: 2,
-                                strokeLinejoin: 'round',
-                                textShadow: '0 0 6px rgba(5, 7, 13, 0.9)',
-                              }}
-                            >
-                              {label}
-                            </text>
-
-                            {/* Area name: white #E9EEF8, Hanken Grotesk 12px, centred 8px below the dot */}
-                            <text
-                              x={item.cx}
-                              y={item.cy + item.r + 8}
-                              textAnchor="middle"
-                              dominantBaseline="hanging"
-                              fill="#E9EEF8"
-                              fontFamily="var(--font-sans), 'Hanken Grotesk', system-ui, sans-serif"
-                              fontSize="12"
-                              fontWeight="500"
-                            >
-                              {item.name}
-                            </text>
-                          </g>
-                        );
-                      })}
-                    </svg>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* 4. Heatmap Grid: Area x Day */}
-            <div className="p-5 sm:p-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] backdrop-blur-md space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <h2 className="font-serif text-2xl text-[var(--ink)] font-normal">
-                    Area × Day Heatmap
-                  </h2>
-                  <p className="font-mono text-[11px] text-[var(--muted)] mt-0.5">
-                    INTENSITY REPRESENTS ESTIMATED HOURS DARK. TAP ANY CELL FOR DETAILS.
-                  </p>
-                </div>
-
-                <div className="flex items-center space-x-2 font-mono text-[10px] text-[var(--muted)]">
-                  <span>0 h</span>
-                  <span className="w-3.5 h-3.5 rounded bg-[#05070D] border border-[var(--border)]" />
-                  <span className="w-3.5 h-3.5 rounded bg-[#FF4B4B]/20 border border-[#FF4B4B]/30" />
-                  <span className="w-3.5 h-3.5 rounded bg-[#FF4B4B]/40 border border-[#FF4B4B]/50" />
-                  <span className="w-3.5 h-3.5 rounded bg-[#FF4B4B]/65 border border-[#FF4B4B]/70" />
-                  <span className="w-3.5 h-3.5 rounded bg-[#FF4B4B] border border-red-300" />
-                  <span>10+ h</span>
-                </div>
-              </div>
-
-              {selectedCell && (
-                <div className="p-3 rounded-lg border border-[var(--back)]/30 bg-[var(--back)]/10 flex items-center justify-between font-mono text-xs animate-pop-in">
+            {/* 4. Heatmap Grid: Area x Day (hidden until it has data) */}
+            {totalHeatmapOutages > 0 && (
+              <div className="p-5 sm:p-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] backdrop-blur-md space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
-                    <span className="font-serif text-sm font-normal text-[var(--ink)]">{selectedCell.area}</span> on{' '}
-                    <span className="text-[var(--back)] font-medium">{formatDayHeader(selectedCell.date)}</span>:
-                    <span className="ml-2 font-bold text-[var(--out)]">
-                      {formatHoursText(selectedCell.hours, selectedCell.outages)} estimated dark
-                    </span>{' '}
-                    ({pluralOutages(selectedCell.outages)})
+                    <h2 className="font-serif text-2xl text-[var(--ink)] font-normal">
+                      Area × Day Heatmap
+                    </h2>
+                    <p className="font-mono text-xs text-[var(--muted)] mt-0.5">
+                      INTENSITY REPRESENTS ESTIMATED HOURS DARK. TAP ANY CELL FOR DETAILS.
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCell(null)}
-                    className="text-[var(--muted)] hover:text-[var(--ink)] font-bold ml-2 px-1 cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
 
-              {/* Empty heatmap state message */}
-              {totalHeatmapOutages === 0 ? (
-                <div className="py-12 border border-[var(--border)] rounded-xl text-center font-mono text-xs text-[var(--muted)]">
-                  No outages recorded this week
+                  <div className="flex items-center space-x-2 font-mono text-xs text-[var(--muted)]">
+                    <span>0 h</span>
+                    <span className="w-3.5 h-3.5 rounded bg-[#05070D] border border-[var(--border)]" />
+                    <span className="w-3.5 h-3.5 rounded bg-[#FF4B4B]/20 border border-[#FF4B4B]/30" />
+                    <span className="w-3.5 h-3.5 rounded bg-[#FF4B4B]/40 border border-[#FF4B4B]/50" />
+                    <span className="w-3.5 h-3.5 rounded bg-[#FF4B4B]/65 border border-[#FF4B4B]/70" />
+                    <span className="w-3.5 h-3.5 rounded bg-[#FF4B4B] border border-red-300" />
+                    <span>10+ h</span>
+                  </div>
                 </div>
-              ) : (
+
+                {selectedCell && (
+                  <div className="p-3 rounded-lg border border-[var(--back)]/30 bg-[var(--back)]/10 flex items-center justify-between font-mono text-xs animate-pop-in">
+                    <div>
+                      <span className="font-serif text-sm font-normal text-[var(--ink)]">{selectedCell.area}</span> on{' '}
+                      <span className="text-[var(--back)] font-medium">{formatDayHeader(selectedCell.date)}</span>:
+                      <span className="ml-2 font-bold text-[var(--out)]">
+                        {formatHoursText(selectedCell.hours, selectedCell.outages)} estimated dark
+                      </span>{' '}
+                      ({pluralOutages(selectedCell.outages)})
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCell(null)}
+                      className="text-[var(--muted)] hover:text-[var(--ink)] font-bold ml-2 px-1 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
                 <div className="overflow-x-auto border border-[var(--border)] rounded-xl max-h-[500px]">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead className="bg-[var(--surface)] text-[var(--muted)] sticky top-0 z-20 backdrop-blur-md">
                       <tr>
-                        <th className="py-2.5 px-3 sticky left-0 z-30 bg-[#0A0F1E] border-r border-b border-[var(--border)] min-w-[130px] font-mono font-semibold text-[11px] uppercase tracking-wider text-[var(--muted)]">
+                        <th className="py-2.5 px-3 sticky left-0 z-30 bg-[#0A0F1E] border-r border-b border-[var(--border)] min-w-[130px] font-mono font-semibold text-xs uppercase tracking-wider text-[var(--muted)]">
                           Area
                         </th>
                         {data.heatmap.dates.map((d) => (
                           <th
                             key={d}
-                            className="py-2.5 px-2 text-center border-b border-[var(--border)] min-w-[50px] font-mono text-[10px] text-[var(--muted)] whitespace-nowrap"
+                            className="py-2.5 px-2 text-center border-b border-[var(--border)] min-w-[50px] font-mono text-xs text-[var(--muted)] whitespace-nowrap"
                           >
                             {formatDayHeader(d)}
                           </th>
@@ -769,7 +508,7 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
                       {data.heatmap.rows.map((row) => (
                         <tr key={row.area} className="border-b border-[var(--border)]/40 hover:bg-[var(--surface)]/40">
                           <td
-                            className="py-2 px-3 sticky left-0 z-10 bg-[#0A0F1E] border-r border-[var(--border)] font-serif text-[17px] text-[var(--ink)] truncate max-w-[140px]"
+                            className="py-2 px-3 sticky left-0 z-10 bg-[#0A0F1E] border-r border-[var(--border)] font-serif text-[17px] text-[var(--ink)] line-clamp-2"
                             title={row.area}
                           >
                             {row.area}
@@ -786,7 +525,7 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
                                     outages: day.outages,
                                   })
                                 }
-                                className={`w-full h-8 rounded border transition-transform hover:scale-105 flex items-center justify-center font-mono text-[10px] cursor-pointer ${getHeatmapColor(
+                                className={`w-full h-8 rounded border transition-transform hover:scale-105 flex items-center justify-center font-mono text-xs cursor-pointer ${getHeatmapColor(
                                   day.hours_dark_estimated,
                                   day.outages
                                 )}`}
@@ -805,14 +544,56 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
                     </tbody>
                   </table>
                 </div>
-              )}
+              </div>
+            )}
+
+            {/* "More charts unlock as data builds" card when charts are empty */}
+            {(data.ranked_areas.length === 0 || totalHeatmapOutages === 0) && (
+              <div className="p-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/60 backdrop-blur-md text-center space-y-1.5">
+                <p className="font-serif text-xl text-[var(--ink)]">More charts unlock as data builds</p>
+                <p className="font-mono text-xs text-[var(--muted)]">
+                  Ranked areas, heatmap trends and outage severity views will populate as more reports are logged over time.
+                </p>
+              </div>
+            )}
+
+            {/* Footer row: Download CSV and Share Image buttons */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-[var(--border)]">
+              <div className="text-xs font-mono text-[var(--muted)]">
+                Export &amp; share outage data
+              </div>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={downloadCSV}
+                  disabled={!data || loading}
+                  className="flex-1 sm:flex-initial font-mono text-xs px-4 py-2.5 rounded-xl bg-[var(--surface)] hover:bg-[var(--surface)]/90 border border-[var(--border)] text-[var(--ink)] transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer shadow-sm"
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  <span>Download CSV</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={downloadShareImage}
+                  disabled={!data || loading}
+                  className="flex-1 sm:flex-initial font-mono text-xs px-4 py-2.5 rounded-xl border border-[var(--out)]/50 bg-[var(--out)]/10 text-[var(--out)] hover:bg-[var(--out)]/20 transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer shadow-sm"
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>Share image</span>
+                </button>
+              </div>
             </div>
           </>
         )}
       </main>
 
-      <footer className="border-t border-[var(--border)] py-6 px-5 text-center font-mono text-[11px] text-[var(--faint)]">
-        <p>Banange Community Outage Map · All metric figures are estimated based on public crowd reports.</p>
+      <footer className="border-t border-[var(--border)] py-6 px-5 text-center font-mono text-xs text-[var(--faint)]">
+        <p>Banange Community Outage Map · Figures combine UEDCL&apos;s public notices with citizen reports.</p>
       </footer>
     </div>
   );

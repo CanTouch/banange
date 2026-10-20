@@ -15,6 +15,8 @@ interface TopBarProps {
 export function TopBar({ isDev, isDemo, onOpenAbout, onThemeChange }: TopBarProps) {
   const { language, setLanguage } = useI18n();
   const [theme, setTheme] = React.useState<'dark' | 'light'>('dark');
+  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+  const menuRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     const saved = localStorage.getItem('banange_theme') as 'dark' | 'light' | null;
@@ -22,6 +24,20 @@ export function TopBar({ isDev, isDemo, onOpenAbout, onThemeChange }: TopBarProp
       setTheme(saved);
     }
   }, []);
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen]);
 
   const toggleTheme = () => {
     const current = (document.documentElement.getAttribute('data-theme') || theme) as 'dark' | 'light';
@@ -40,95 +56,101 @@ export function TopBar({ isDev, isDemo, onOpenAbout, onThemeChange }: TopBarProp
   return (
     <>
       {isDemo && (
-        <div className="relative z-40 bg-amber-600/90 text-white font-mono text-[10px] uppercase tracking-wider py-1 px-3 text-center border-b border-amber-500/40">
+        <div className="relative z-40 bg-amber-600/90 text-white font-mono text-xs uppercase tracking-wider py-1 px-3 text-center border-b border-amber-500/40">
           DEMO DATA — 30-day simulated dataset
         </div>
       )}
       <header className="relative z-30 h-16 w-full px-5 flex items-center justify-between pointer-events-none select-none">
-        {/* Left: Wordmark in Instrument Serif 30px with small glowing amber dot */}
+        {/* Left: Wordmark in Instrument Serif 30px (amber dot removed) */}
         <div className="flex items-center gap-2 pointer-events-auto">
           <Link href="/" className="flex items-center gap-1.5 group">
             <span className="font-serif text-[30px] leading-none text-[var(--ink)] tracking-tight">
               Banange
             </span>
-            <span
-              className="w-2 h-2 rounded-full bg-[var(--back)] shadow-[0_0_8px_#FFB547] translate-y-[2px]"
-              title="Uganda Outages Map"
-            />
           </Link>
           <DevBadge isDev={isDev} />
         </div>
 
-        {/* Right: Round 36px action buttons */}
-        <div className="flex items-center gap-2 pointer-events-auto">
-          {/* Insights button */}
-          <Link
-            href="/insights"
-            className="w-9 h-9 rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)] hover:border-[var(--faint)] backdrop-blur-md flex items-center justify-center transition-colors"
-            title="Outage Insights"
-            aria-label="Insights"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="20" x2="18" y2="10" />
-              <line x1="12" y1="20" x2="12" y2="4" />
-              <line x1="6" y1="20" x2="6" y2="14" />
-            </svg>
-          </Link>
-
-          {/* Language EN/LG */}
+        {/* Right: Single menu button with dropdown */}
+        <div className="relative pointer-events-auto" ref={menuRef}>
           <button
             type="button"
-            onClick={() => setLanguage(language === 'en' ? 'lg' : 'en')}
-            className="w-9 h-9 rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)] hover:border-[var(--faint)] backdrop-blur-md flex items-center justify-center font-mono text-[11px] font-semibold transition-colors cursor-pointer"
-            title="Toggle language (English / Luganda)"
-            aria-label="Toggle language"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="w-10 h-10 rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--faint)] backdrop-blur-md flex items-center justify-center transition-colors cursor-pointer shadow-md"
+            title="Menu"
+            aria-label="Open menu"
+            aria-expanded={isMenuOpen}
           >
-            {language === 'en' ? 'LG' : 'EN'}
-          </button>
-
-          {/* Theme sun/moon */}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="w-9 h-9 rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)] hover:border-[var(--faint)] backdrop-blur-md flex items-center justify-center transition-colors cursor-pointer"
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            aria-label="Toggle theme"
-          >
-            {theme === 'dark' ? (
-              // Sun icon for dark mode
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="5" />
-                <line x1="12" y1="1" x2="12" y2="3" />
-                <line x1="12" y1="21" x2="12" y2="23" />
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                <line x1="1" y1="12" x2="3" y2="12" />
-                <line x1="21" y1="12" x2="23" y2="12" />
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-              </svg>
-            ) : (
-              // Moon icon for light mode
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-              </svg>
-            )}
-          </button>
-
-          {/* About button */}
-          <button
-            type="button"
-            onClick={onOpenAbout}
-            className="w-9 h-9 rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)] hover:border-[var(--faint)] backdrop-blur-md flex items-center justify-center transition-colors cursor-pointer"
-            title="About Banange"
-            aria-label="About"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="16" x2="12" y2="12" />
-              <line x1="12" y1="8" x2="12.01" y2="8" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           </button>
+
+          {/* Menu Dropdown: Stats, Language, Theme, About */}
+          {isMenuOpen && (
+            <div className="absolute right-0 top-12 w-48 rounded-2xl bg-[var(--surface)] border border-[var(--border)] backdrop-blur-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-pop-in">
+              <Link
+                href="/insights"
+                onClick={() => setIsMenuOpen(false)}
+                className="flex items-center justify-between px-3.5 py-2.5 rounded-xl hover:bg-[var(--border)]/40 text-sm font-sans text-[var(--ink)] transition-colors cursor-pointer"
+              >
+                <span>Stats</span>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--muted)]">
+                  <line x1="18" y1="20" x2="18" y2="10" />
+                  <line x1="12" y1="20" x2="12" y2="4" />
+                  <line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setLanguage(language === 'en' ? 'lg' : 'en');
+                  setIsMenuOpen(false);
+                }}
+                className="flex items-center justify-between w-full px-3.5 py-2.5 rounded-xl hover:bg-[var(--border)]/40 text-sm font-sans text-[var(--ink)] transition-colors cursor-pointer text-left"
+              >
+                <span>Language</span>
+                <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-[var(--border)]/50 text-[var(--muted)]">
+                  {language === 'en' ? 'English (LG)' : 'Luganda (EN)'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  toggleTheme();
+                  setIsMenuOpen(false);
+                }}
+                className="flex items-center justify-between w-full px-3.5 py-2.5 rounded-xl hover:bg-[var(--border)]/40 text-sm font-sans text-[var(--ink)] transition-colors cursor-pointer text-left"
+              >
+                <span>Theme</span>
+                <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-[var(--border)]/50 text-[var(--muted)]">
+                  {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+                </span>
+              </button>
+
+              <div className="h-px bg-[var(--border)] my-0.5" />
+
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenAbout();
+                  setIsMenuOpen(false);
+                }}
+                className="flex items-center justify-between w-full px-3.5 py-2.5 rounded-xl hover:bg-[var(--border)]/40 text-sm font-sans text-[var(--ink)] transition-colors cursor-pointer text-left"
+              >
+                <span>About</span>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--muted)]">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       </header>
     </>

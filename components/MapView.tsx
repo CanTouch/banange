@@ -372,8 +372,8 @@ export function MapView({ cells, officialPlaces = [], flyToLocation }: MapViewPr
           const html = `
             <div class="flex flex-col gap-1 min-w-[170px] text-left">
               <h4 class="font-serif text-lg leading-tight font-normal text-[var(--ink)]">${props.area || 'Uganda'}</h4>
-              <p class="font-mono text-[11px] text-[var(--muted)]">${statusText}</p>
-              <p class="font-mono text-[10px] text-[var(--faint)] pt-1 mt-0.5 border-t border-[var(--border)]">
+              <p class="font-mono text-xs text-[var(--muted)]">${statusText}</p>
+              <p class="font-mono text-xs text-[var(--faint)] pt-1 mt-0.5 border-t border-[var(--border)]">
                 ${props.reporters || 1} people reported
               </p>
             </div>
@@ -411,12 +411,12 @@ export function MapView({ cells, officialPlaces = [], flyToLocation }: MapViewPr
         const html = `
           <div class="flex flex-col gap-1 min-w-[180px] text-left">
             <div class="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-1 mb-0.5">
-              <span class="font-mono text-[11px] font-bold text-[#F59E0B] tracking-wide uppercase">${props.service_area || 'UEDCL'}</span>
-              <span class="font-mono text-[10px] text-[var(--muted)]">${timeEat}</span>
+              <span class="font-mono text-xs font-bold text-[#F59E0B] tracking-wide uppercase">${props.service_area || 'UEDCL'}</span>
+              <span class="font-mono text-xs text-[var(--muted)]">${timeEat}</span>
             </div>
             <h4 class="font-serif text-lg leading-tight font-normal text-[var(--ink)]">${props.place_name}</h4>
-            <p class="font-mono text-[11px] text-[#F59E0B] font-medium">${props.status_raw}</p>
-            <p class="font-mono text-[10px] text-[var(--faint)] pt-1 mt-0.5 border-t border-[var(--border)]">
+            <p class="font-mono text-xs text-[#F59E0B] font-medium">${props.status_raw}</p>
+            <p class="font-mono text-xs text-[var(--faint)] pt-1 mt-0.5 border-t border-[var(--border)]">
               Listed by UEDCL
             </p>
           </div>
@@ -511,9 +511,8 @@ export function MapView({ cells, officialPlaces = [], flyToLocation }: MapViewPr
         }}
       />
 
-      {/* Top Right Controls: Quick-jump toggle & Map Legend */}
-      <div className="absolute top-20 right-5 z-20 flex flex-col items-end gap-2 pointer-events-auto">
-        {/* Quick-jump toggle: Kampala / All Uganda */}
+      {/* Quick-jump toggle: Kampala / All Uganda (top right) */}
+      <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 pointer-events-auto">
         <div className="flex items-center bg-[var(--surface)]/90 backdrop-blur-md border border-[var(--border)] rounded-full p-0.5 shadow-lg">
           <button
             type="button"
@@ -540,18 +539,20 @@ export function MapView({ cells, officialPlaces = [], flyToLocation }: MapViewPr
             All Uganda
           </button>
         </div>
+      </div>
 
-        {/* Map Legend with amber entry */}
+      {/* Map Legend with amber entry (below status chip on mobile, below toggle on desktop) */}
+      <div className="absolute top-26 left-3 sm:top-16 sm:right-4 sm:left-auto z-20 pointer-events-auto">
         <div className="flex flex-col gap-1.5 bg-[var(--surface)]/90 backdrop-blur-md border border-[var(--border)] rounded-2xl px-3 py-2 shadow-lg">
-          <div className="flex items-center gap-2 font-mono text-[10px] text-[var(--muted)]">
+          <div className="flex items-center gap-2 font-mono text-xs text-[var(--muted)]">
             <span className="w-2.5 h-2.5 rounded-full bg-[#FF4B4B] shadow-[0_0_6px_#FF4B4B] shrink-0" />
             <span>Citizen report</span>
           </div>
-          <div className="flex items-center gap-2 font-mono text-[10px] text-[var(--muted)]">
+          <div className="flex items-center gap-2 font-mono text-xs text-[var(--muted)]">
             <span className="w-3 h-3 rounded-full border-2 border-[#F59E0B] bg-transparent shrink-0" />
             <span>Listed by UEDCL</span>
           </div>
-          <div className="flex items-center gap-2 font-mono text-[10px] text-[var(--muted)]">
+          <div className="flex items-center gap-2 font-mono text-xs text-[var(--muted)]">
             <span className="w-3 h-3 rounded-full border-2 border-dashed border-[#F59E0B] bg-transparent shrink-0" />
             <span>Partly restored</span>
           </div>
@@ -559,7 +560,7 @@ export function MapView({ cells, officialPlaces = [], flyToLocation }: MapViewPr
       </div>
 
       {/* Visible OSM Attribution */}
-      <div className="absolute bottom-1 right-2 z-20 pointer-events-none text-[10px] font-mono text-[var(--faint)] bg-[var(--surface)]/80 px-2 py-0.5 rounded border border-[var(--border)]/50 backdrop-blur-xs">
+      <div className="absolute bottom-1 right-2 z-20 pointer-events-none text-xs font-mono text-[var(--faint)] bg-[var(--surface)]/80 px-2 py-0.5 rounded border border-[var(--border)]/50 backdrop-blur-xs">
         © OpenStreetMap contributors · OpenFreeMap
       </div>
     </div>

@@ -16,9 +16,10 @@ interface TimeSliderProps {
     darkCount?: number
   ) => void;
   isLite?: boolean;
+  latestIngestTime?: string | null;
 }
 
-export function TimeSlider({ onHistoricalChange, isLite }: TimeSliderProps) {
+export function TimeSlider({ onHistoricalChange, isLite, latestIngestTime }: TimeSliderProps) {
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
   const STEP_15_MIN_MS = 15 * 60 * 1000;
 
@@ -51,6 +52,20 @@ export function TimeSlider({ onHistoricalChange, isLite }: TimeSliderProps) {
       );
     } catch {
       return new Date(timeMs).toLocaleTimeString();
+    }
+  };
+
+  const formatUpdatedTime = () => {
+    try {
+      const d = latestIngestTime ? new Date(latestIngestTime) : new Date();
+      return `Updated ${new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Africa/Kampala',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(d)}`;
+    } catch {
+      return 'Updated recently';
     }
   };
 
@@ -239,7 +254,7 @@ export function TimeSlider({ onHistoricalChange, isLite }: TimeSliderProps) {
           <span className="font-mono text-xs font-semibold tracking-wider uppercase text-[var(--ink)]">
             {isLive ? 'LIVE NOW' : formatEAT(sliderTimeMs)}
           </span>
-          <span className="font-mono text-[11px] text-[var(--muted)]">
+          <span className="font-mono text-xs text-[var(--muted)]">
             {isLive ? (
               'Real-time data'
             ) : frameDarkCount !== null ? (
@@ -252,15 +267,15 @@ export function TimeSlider({ onHistoricalChange, isLite }: TimeSliderProps) {
 
         <div>
           {isLive ? (
-            <div className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 font-mono text-[10px] font-semibold text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>LIVE</span>
+            <div className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 font-mono text-xs font-semibold text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>{formatUpdatedTime()}</span>
             </div>
           ) : (
             <button
               type="button"
               onClick={returnToLive}
-              className="px-2.5 py-1 rounded-full bg-[var(--out)] hover:opacity-90 text-[#05070D] font-sans text-[11px] font-bold shadow-md shadow-[var(--out)]/30 transition-all active:scale-95 flex items-center space-x-1 cursor-pointer"
+              className="px-2.5 py-1 rounded-full bg-[var(--out)] hover:opacity-95 text-[#05070D] font-sans text-xs font-bold shadow-md shadow-[var(--out)]/30 transition-all active:scale-95 flex items-center space-x-1 cursor-pointer"
             >
               <span>Return to Live</span>
             </button>
@@ -270,7 +285,7 @@ export function TimeSlider({ onHistoricalChange, isLite }: TimeSliderProps) {
 
       {/* Scrubber Range Input */}
       <div className="flex items-center space-x-2.5 mb-2.5">
-        <span className="font-mono text-[10px] text-[var(--muted)] whitespace-nowrap">-7d</span>
+        <span className="font-mono text-xs text-[var(--muted)] whitespace-nowrap">-7d</span>
         <input
           type="range"
           suppressHydrationWarning
@@ -282,7 +297,7 @@ export function TimeSlider({ onHistoricalChange, isLite }: TimeSliderProps) {
           aria-label="History scrubber slider"
           className="w-full h-1.5 bg-[var(--border)] rounded-lg appearance-none cursor-pointer accent-[var(--out)]"
         />
-        <span className="font-mono text-[10px] text-[var(--muted)] whitespace-nowrap">Now</span>
+        <span className="font-mono text-xs text-[var(--muted)] whitespace-nowrap">Now</span>
       </div>
 
       {/* Controls Bar: Play / Pause, Stop */}
