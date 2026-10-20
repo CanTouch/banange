@@ -1,9 +1,17 @@
-import Link from 'next/link';
+import { Metadata } from 'next';
 import { getSupabaseServerClient } from '@/lib/supabase-server';
 import { DEFAULT_COST_CONSTANTS, CostConstant, calculateCostArithmetic } from '@/lib/cost';
 import { processOfficialAlerts, OfficialAlertRow } from '@/lib/official-comparison';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'Cost & Economic Model - Banange',
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default async function CostPage() {
   const supabase = getSupabaseServerClient();
@@ -63,19 +71,20 @@ export default async function CostPage() {
   let totalCustomerHoursMid = 0;
 
   for (const p of processed) {
-    const places = Math.max(1, p.matched_places.length);
+    // The cost model must not depend on map matching: use total_areas (all listed areas)
+    const areasCount = Math.max(1, p.total_areas);
     if (p.duration_hours !== null && (p.duration_type === 'exact' || p.duration_type === 'running')) {
       rowsCounted++;
       // Customer range: 500 (low) to 2000 (high), default/mid: 1000
-      totalCustomerHoursLow += places * 500 * p.duration_hours;
-      totalCustomerHoursMid += places * 1000 * p.duration_hours;
-      totalCustomerHoursHigh += places * 2000 * p.duration_hours;
+      totalCustomerHoursLow += areasCount * 500 * p.duration_hours;
+      totalCustomerHoursMid += areasCount * 1000 * p.duration_hours;
+      totalCustomerHoursHigh += areasCount * 2000 * p.duration_hours;
     } else {
       rowsExcluded++;
     }
   }
 
-  const avgKw = constantsMap.avg_kw_per_customer.value; // 0.18
+  const avgKw = constantsMap.avg_kw_per_customer.value; // 0.17
   const tariffLow = constantsMap.tariff_low_ugx_per_kwh.value; // 412
   const tariffHigh = constantsMap.tariff_high_ugx_per_kwh.value; // 779.4
   const genUsd = constantsMap.generator_usd_per_kwh.value; // 0.47
@@ -126,31 +135,29 @@ export default async function CostPage() {
     return Math.round(n).toLocaleString('en-US');
   };
 
+  // Sanity Benchmark calculations from UEDCL Annual Report 2025:
+  // - Customer base: 2,487,346 (Page 32)
+  // - Monthly SAIDI: 7.93 - 12.39 hours per month (Page 43, item 8)
+  // Implied daily national customer-hours = 2,487,346 * (10.16 / 30.416) ~ 830,860 customer-hours/day
+  const saidiImpliedCustomerHoursPerDay = 830860;
+  const isEstimateHigherThanSaidi = totalCustomerHoursMid > saidiImpliedCustomerHoursPerDay;
+
   return (
     <div className="min-h-screen bg-[#05070D] text-[var(--ink)] font-sans">
-      {/* Header */}
+      {/* 1. Top experimental banner */}
+      <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2.5 text-center font-mono text-xs text-[var(--accent-amber)] font-medium">
+        ⚠ Experimental estimate. Not a published figure.
+      </div>
+
+      {/* Header without app navigation links */}
       <header className="border-b border-[var(--border)] px-5 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <Link href="/" className="font-serif text-2xl font-bold tracking-tight text-[var(--ink)]">
+          <span className="font-serif text-2xl font-bold tracking-tight text-[var(--ink)]">
             Banange
-          </Link>
+          </span>
           <span className="font-mono text-xs px-2 py-0.5 rounded bg-[var(--surface)] text-[var(--muted)] border border-[var(--border)]">
             Cost & Economic Model
           </span>
-        </div>
-        <div className="flex items-center space-x-4">
-          <Link
-            href="/insights"
-            className="font-mono text-xs text-[var(--muted)] hover:text-[var(--ink)] transition-colors"
-          >
-            Insights
-          </Link>
-          <Link
-            href="/"
-            className="font-mono text-xs text-[var(--muted)] hover:text-[var(--ink)] transition-colors"
-          >
-            Map
-          </Link>
         </div>
       </header>
 
@@ -183,6 +190,46 @@ export default async function CostPage() {
               <span className="text-[var(--faint)]">Calculated for: </span>
               <strong className="text-white">{kampalaDateStr} (EAT)</strong>
             </div>
+          </div>
+        </section>
+
+        {/* 2. Sanity Panel against UEDCL Annual Report 2025 */}
+        <section className="p-5 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-serif text-base font-semibold text-white">
+              Sanity Benchmark: UEDCL Reported Reliability (2025 Annual Report)
+            </h2>
+            <span className="font-mono text-[10px] text-[var(--faint)]">Pages 32 &amp; 43</span>
+          </div>
+
+          <p className="font-mono text-xs text-[var(--muted)] leading-relaxed">
+            In its 2024/25 Annual Report, UEDCL reported{' '}
+            <strong className="text-white">2,487,346 customers</strong> (Page 32) and registered a System Average
+            Interruption Duration Index (SAIDI) ranging between{' '}
+            <strong className="text-white">7.93 – 12.39 hours per month</strong> (Page 43, item 8).
+          </p>
+
+          <div className="p-3 rounded-lg bg-[#0A0F1E] border border-[var(--border)]/60 font-mono text-xs space-y-2">
+            <div className="text-[var(--muted)]">
+              UEDCL&apos;s reported SAIDI implies about{' '}
+              <strong className="text-white">
+                {Math.round(saidiImpliedCustomerHoursPerDay).toLocaleString()} customer-hours per day nationally
+              </strong>
+              ; this page&apos;s estimate for today is{' '}
+              <strong className="text-[var(--accent-amber)]">
+                {Math.round(totalCustomerHoursMid).toLocaleString()}
+              </strong>{' '}
+              (mid-range assumption: 1,000 customers per listed area).
+            </div>
+
+            {isEstimateHigherThanSaidi && (
+              <div className="p-2.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] flex items-center space-x-2">
+                <span>⚠</span>
+                <span>
+                  <strong>Warning:</strong> Today&apos;s estimate ({Math.round(totalCustomerHoursMid).toLocaleString()} customer-hours) is larger than UEDCL&apos;s reported daily average ({Math.round(saidiImpliedCustomerHoursPerDay).toLocaleString()}), indicating the estimate is probably too high.
+                </span>
+              </div>
+            )}
           </div>
         </section>
 
@@ -245,7 +292,7 @@ export default async function CostPage() {
               UGX {formatUgx(calcMid.revenue_loss_low_ugx)} – {formatUgx(calcMid.revenue_loss_high_ugx)}
             </div>
             <p className="font-mono text-[11px] text-[var(--muted)]">
-              Based on domestic & commercial tariffs (412 to 779.4 UGX/kWh)
+              Based on domestic &amp; commercial tariffs (412 to 779.4 UGX/kWh)
             </p>
             <div className="pt-2 text-[10px] font-mono text-[var(--faint)] border-t border-[var(--border)]/40">
               Source:{' '}
@@ -263,15 +310,15 @@ export default async function CostPage() {
 
         {/* Energy breakdown table */}
         <section className="p-6 rounded-lg bg-[var(--surface)] border border-[var(--border)] space-y-4">
-          <h2 className="font-serif text-xl font-bold text-white">Calculations & Assumptions</h2>
+          <h2 className="font-serif text-xl font-bold text-white">Calculations &amp; Assumptions</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left font-mono text-xs">
               <thead>
                 <tr className="border-b border-[var(--border)] text-[var(--muted)]">
                   <th className="py-2.5 pr-4 font-semibold">Metric</th>
-                  <th className="py-2.5 px-4 font-semibold text-right">Low (500 cust/place)</th>
-                  <th className="py-2.5 px-4 font-semibold text-right">Mid (1,000 cust/place)</th>
-                  <th className="py-2.5 pl-4 font-semibold text-right">High (2,000 cust/place)</th>
+                  <th className="py-2.5 px-4 font-semibold text-right">Low (500 cust/area)</th>
+                  <th className="py-2.5 px-4 font-semibold text-right">Mid (1,000 cust/area)</th>
+                  <th className="py-2.5 pl-4 font-semibold text-right">High (2,000 cust/area)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]/40">
@@ -306,7 +353,7 @@ export default async function CostPage() {
 
         {/* Model Constants Table with Links and Citations */}
         <section className="p-6 rounded-lg bg-[var(--surface)] border border-[var(--border)] space-y-4">
-          <h2 className="font-serif text-xl font-bold text-white">Underlying Constants & Citations</h2>
+          <h2 className="font-serif text-xl font-bold text-white">Underlying Constants &amp; Citations</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left font-mono text-xs">
               <thead>
@@ -342,7 +389,7 @@ export default async function CostPage() {
       </main>
 
       <footer className="border-t border-[var(--border)] py-6 px-5 text-center font-mono text-[11px] text-[var(--faint)]">
-        <p>Banange Economic Model · Estimate based on public UEDCL notices and crowd reports. Not an official figure.</p>
+        <p>Banange Economic Model · Experimental estimate based on public UEDCL notices. Not a published figure.</p>
       </footer>
     </div>
   );

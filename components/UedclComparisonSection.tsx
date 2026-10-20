@@ -53,13 +53,7 @@ export function UedclComparisonSection() {
             Last 24 hours · Africa/Kampala time
           </p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Link
-            href="/cost"
-            className="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[#05070D] font-mono text-xs text-[var(--accent-amber)] hover:bg-[var(--border)]/30 transition-colors"
-          >
-            Cost Estimate →
-          </Link>
+        <div>
           <button
             onClick={downloadUedclCsv}
             type="button"
@@ -159,14 +153,14 @@ export function UedclComparisonSection() {
               )}
             </div>
 
-            {/* 1c. Citizens reported, not on UEDCL's list */}
+            {/* 1c. Citizen reports with no matching UEDCL notice we could place */}
             <div className="space-y-3">
               <div className="border-b border-[var(--border)]/40 pb-2">
                 <h3 className="font-serif text-base font-semibold text-[var(--out)]">
-                  Citizens reported, not on UEDCL&apos;s list
+                  Citizen reports with no matching UEDCL notice we could place
                 </h3>
                 <p className="font-mono text-[11px] text-[var(--muted)]">
-                  Not listed by UEDCL at the time of the report.
+                  {data.footer.total_places - data.footer.matched_count} of {data.footer.total_places} listed areas could not be placed on the map, so some matches may be missing.
                 </p>
               </div>
 

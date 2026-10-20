@@ -11,13 +11,13 @@ create table if not exists public.cost_constants (
 -- Seed cost constants
 insert into public.cost_constants (key, value, unit, source_name, source_url, checked_at)
 values
-  ('tariff_low_ugx_per_kwh', 412, 'UGX/kWh', 'ERA Q4 2026 Tariffs (UEDCL)', 'https://www.era.go.ug/distribution-tariffs/', now()),
-  ('tariff_high_ugx_per_kwh', 779.4, 'UGX/kWh', 'ERA Q4 2026 Tariffs (UEDCL)', 'https://www.era.go.ug/distribution-tariffs/', now()),
-  ('generator_usd_per_kwh', 0.47, 'USD/kWh', 'Oseni and Pollitt 2013 (Cambridge EPRG WP 1351)', 'https://www.eprg.group.cam.ac.uk/wp-content/uploads/2014/01/1330-PDF.pdf', now()),
-  ('value_of_lost_load_usd_per_kwh_floor', 2, 'USD/kWh', 'Oseni and Pollitt 2015 (Energy Economics 52)', 'https://doi.org/10.1016/j.eneco.2015.10.003', now()),
-  ('usd_to_ugx', 3700, 'UGX/USD', 'Bank of Uganda', 'https://www.bou.or.ug/', now()),
-  ('assumed_customers_per_place', 1000, 'customers', 'Banange Model (range 500 to 2000)', 'https://banange.kuppelabs.com/cost', now()),
-  ('avg_kw_per_customer', 0.18, 'kW', 'ERA Q2 2026 Distribution Statistics (Unverified placeholder)', 'https://www.era.go.ug/energy-sales-by-customer-category/', now())
+  ('tariff_low_ugx_per_kwh', 412, 'UGX/kWh', 'UEDCL Q4 Tariffs (Daily Monitor)', 'https://www.monitor.co.ug/uganda/news/national/uedcl-sets-new-power-tariffs-for-final-quarter-5620680', now()),
+  ('tariff_high_ugx_per_kwh', 779.4, 'UGX/kWh', 'UEDCL Q4 Tariffs (Daily Monitor)', 'https://www.monitor.co.ug/uganda/news/national/uedcl-sets-new-power-tariffs-for-final-quarter-5620680', now()),
+  ('generator_usd_per_kwh', 0.47, 'USD/kWh', 'Oseni and Pollitt, as summarised by Energy for Growth Hub', 'https://energyforgrowth.org/article/costs-of-unreliable-electricity-to-african-firms/', now()),
+  ('value_of_lost_load_usd_per_kwh_floor', 2, 'USD/kWh', 'Oseni and Pollitt, as summarised by Energy for Growth Hub', 'https://energyforgrowth.org/article/costs-of-unreliable-electricity-to-african-firms/', now()),
+  ('usd_to_ugx', 3700, 'UGX/USD', 'Placeholder, to be updated from Bank of Uganda', 'https://www.bou.or.ug/', now()),
+  ('assumed_customers_per_place', 1000, 'customers', 'Banange Model (range 500 to 2000, our own assumption)', 'https://banange.kuppelabs.com/cost', now()),
+  ('avg_kw_per_customer', 0.17, 'kW', 'ERA Distribution Statistics Q2 2026 (sheets Energy Sales_kWh and Number of Customers), computed by Banange', 'https://www.era.go.ug/energy-sales-by-customer-category/', now())
 on conflict (key) do update set
   value = excluded.value,
   unit = excluded.unit,

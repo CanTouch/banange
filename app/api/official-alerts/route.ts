@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabase-server';
 import { getStore } from '@/lib/store';
-import { processOfficialAlerts, OfficialAlertRow, ComparisonSummary, calculateMedian } from '@/lib/official-comparison';
+import { processOfficialAlerts, OfficialAlertRow, ComparisonSummary, calculateMedian, normalizeAreaForMatch } from '@/lib/official-comparison';
 import { haversineKm } from '@/lib/cells';
 
 export const dynamic = 'force-dynamic';
@@ -128,21 +128,36 @@ export async function GET(req: NextRequest) {
   const uedclCount = activeNonStaleAlerts.length;
   const citizenCount = citizenAreaMap.size;
 
-  // In both: citizen areas that have an active, non-stale UEDCL place within 1.5 km
+  // In both: citizen areas that match an active, non-stale UEDCL notice by normalized name OR within 1.5 km of a placed area
   let inBothCount = 0;
   const citizenOnlyAreas: ComparisonSummary['citizen_only_areas'] = [];
 
+  // Set of all normalized names from active alerts
+  const activeNormalizedAreaNames = new Set<string>();
+  for (const a of activeNonStaleAlerts) {
+    for (const areaStr of a.alert.areas) {
+      activeNormalizedAreaNames.add(normalizeAreaForMatch(areaStr));
+    }
+    for (const mp of a.matched_places) {
+      activeNormalizedAreaNames.add(normalizeAreaForMatch(mp.place_name));
+    }
+  }
+
   for (const ca of Array.from(citizenAreaMap.values())) {
-    let hasCloseUedcl = false;
-    for (const up of activePlaces) {
-      const dist = haversineKm({ lat: ca.lat, lng: ca.lng }, { lat: up.lat, lng: up.lng });
-      if (dist <= 1.5) {
-        hasCloseUedcl = true;
-        break;
+    const normCitizenName = normalizeAreaForMatch(ca.area_name);
+    let matchedUedcl = activeNormalizedAreaNames.has(normCitizenName);
+
+    if (!matchedUedcl) {
+      for (const up of activePlaces) {
+        const dist = haversineKm({ lat: ca.lat, lng: ca.lng }, { lat: up.lat, lng: up.lng });
+        if (dist <= 1.5) {
+          matchedUedcl = true;
+          break;
+        }
       }
     }
 
-    if (hasCloseUedcl) {
+    if (matchedUedcl) {
       inBothCount++;
     } else {
       citizenOnlyAreas.push({

@@ -46,17 +46,18 @@ export async function updateTodayOutageDailySummary(supabase: SupabaseClient, no
     let rowsCounted = 0;
     let rowsExcluded = 0;
 
-    const avgKw = DEFAULT_COST_CONSTANTS.avg_kw_per_customer.value; // 0.18
+    const avgKw = DEFAULT_COST_CONSTANTS.avg_kw_per_customer.value; // 0.17
 
     for (const p of processed) {
-      const placesCount = Math.max(1, p.matched_places.length);
+      // Cost model does NOT depend on map matching: use total_areas (all listed areas)
+      const areasCount = Math.max(1, p.total_areas);
       matchedPlacesCount += p.matched_places.length;
 
       if (p.duration_hours !== null && (p.duration_type === 'exact' || p.duration_type === 'running')) {
         rowsCounted++;
-        // Low: 500 customers per place; High: 2000 customers per place
-        const chLow = placesCount * 500 * p.duration_hours;
-        const chHigh = placesCount * 2000 * p.duration_hours;
+        // Low: 500 customers per area; High: 2000 customers per area
+        const chLow = areasCount * 500 * p.duration_hours;
+        const chHigh = areasCount * 2000 * p.duration_hours;
         customerHoursLow += chLow;
         customerHoursHigh += chHigh;
       } else {

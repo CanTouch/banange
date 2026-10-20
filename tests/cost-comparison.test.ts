@@ -38,6 +38,15 @@ describe('Cost Arithmetic', () => {
     // 21,600 * 2 * 3700 = 159,840,000 UGX
     expect(result.economic_value_floor_ugx).toBe(21600 * 2 * 3700);
   });
+
+  it('has DEFAULT_COST_CONSTANTS configured with 0.17 kW and verified metadata', async () => {
+    const { DEFAULT_COST_CONSTANTS } = await import('../lib/cost');
+    expect(DEFAULT_COST_CONSTANTS.avg_kw_per_customer.value).toBe(0.17);
+    expect(DEFAULT_COST_CONSTANTS.avg_kw_per_customer.source_name).toContain('ERA Distribution Statistics');
+    expect(DEFAULT_COST_CONSTANTS.usd_to_ugx.source_name).toContain('Placeholder, to be updated from Bank of Uganda');
+    expect(DEFAULT_COST_CONSTANTS.tariff_low_ugx_per_kwh.source_url).toContain('monitor.co.ug');
+    expect(DEFAULT_COST_CONSTANTS.generator_usd_per_kwh.source_url).toContain('energyforgrowth.org');
+  });
 });
 
 describe('Official Alerts & Comparison Rules', () => {
@@ -112,5 +121,14 @@ describe('Official Alerts & Comparison Rules', () => {
 
     const sample6 = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
     expect(calculateMedian(sample6)).toBe(3.5);
+  });
+
+  it('normalizes area names for matching correctly', async () => {
+    const { normalizeAreaForMatch } = await import('../lib/official-comparison');
+    expect(normalizeAreaForMatch('Ntinda Town')).toBe('ntinda');
+    expect(normalizeAreaForMatch('Parts of Nakasero')).toBe('nakasero');
+    expect(normalizeAreaForMatch('Kiwatule TC')).toBe('kiwatule');
+    expect(normalizeAreaForMatch('Kololo Hill')).toBe('kololo');
+    expect(normalizeAreaForMatch('Bukoto Estate')).toBe('bukoto');
   });
 });

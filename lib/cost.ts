@@ -3,15 +3,15 @@
  *
  * Seeded values:
  * - tariff_low_ugx_per_kwh: 412
- * - tariff_high_ugx_per_kwh: 779.4
- * - generator_usd_per_kwh: 0.47
- * - value_of_lost_load_usd_per_kwh_floor: 2
- * - usd_to_ugx: 3700 (or live BOU reference)
- * - assumed_customers_per_place: 1000 (range 500 to 2000)
- * - avg_kw_per_customer: 0.18 (placeholder, unverified)
+ * - tariff_high_ugx_per_kwh: 779.4 (Daily Monitor report on UEDCL Q4 tariffs)
+ * - generator_usd_per_kwh: 0.47 (Oseni and Pollitt, Energy for Growth Hub)
+ * - value_of_lost_load_usd_per_kwh_floor: 2 (Oseni and Pollitt, Energy for Growth Hub)
+ * - usd_to_ugx: 3700 (Placeholder, to be updated from Bank of Uganda)
+ * - assumed_customers_per_place: 1000 (range 500 to 2000, our own assumption)
+ * - avg_kw_per_customer: 0.17 (ERA Distribution Statistics Q2 2026, computed by Banange)
  *
  * Calculation per day:
- * - customer_hours = matched_places x assumed_customers x hours
+ * - customer_hours = total_areas x assumed_customers x hours
  * - kWh = customer_hours x avg_kw
  * - revenue not billed = kWh x tariff (low and high)
  * - generator cost = kWh x 0.47 x usd_to_ugx
@@ -31,49 +31,49 @@ export const DEFAULT_COST_CONSTANTS: Record<string, CostConstant> = {
     key: 'tariff_low_ugx_per_kwh',
     value: 412,
     unit: 'UGX/kWh',
-    source_name: 'ERA Q4 2026 Tariffs (UEDCL)',
-    source_url: 'https://www.era.go.ug/distribution-tariffs/',
+    source_name: 'UEDCL Q4 Tariffs (Daily Monitor)',
+    source_url: 'https://www.monitor.co.ug/uganda/news/national/uedcl-sets-new-power-tariffs-for-final-quarter-5620680',
   },
   tariff_high_ugx_per_kwh: {
     key: 'tariff_high_ugx_per_kwh',
     value: 779.4,
     unit: 'UGX/kWh',
-    source_name: 'ERA Q4 2026 Tariffs (UEDCL)',
-    source_url: 'https://www.era.go.ug/distribution-tariffs/',
+    source_name: 'UEDCL Q4 Tariffs (Daily Monitor)',
+    source_url: 'https://www.monitor.co.ug/uganda/news/national/uedcl-sets-new-power-tariffs-for-final-quarter-5620680',
   },
   generator_usd_per_kwh: {
     key: 'generator_usd_per_kwh',
     value: 0.47,
     unit: 'USD/kWh',
-    source_name: 'Oseni and Pollitt 2013 (Cambridge EPRG WP 1351)',
-    source_url: 'https://www.eprg.group.cam.ac.uk/wp-content/uploads/2014/01/1330-PDF.pdf',
+    source_name: 'Oseni and Pollitt, as summarised by Energy for Growth Hub',
+    source_url: 'https://energyforgrowth.org/article/costs-of-unreliable-electricity-to-african-firms/',
   },
   value_of_lost_load_usd_per_kwh_floor: {
     key: 'value_of_lost_load_usd_per_kwh_floor',
     value: 2,
     unit: 'USD/kWh',
-    source_name: 'Oseni and Pollitt 2015 (Energy Economics 52)',
-    source_url: 'https://doi.org/10.1016/j.eneco.2015.10.003',
+    source_name: 'Oseni and Pollitt, as summarised by Energy for Growth Hub',
+    source_url: 'https://energyforgrowth.org/article/costs-of-unreliable-electricity-to-african-firms/',
   },
   usd_to_ugx: {
     key: 'usd_to_ugx',
     value: 3700,
     unit: 'UGX/USD',
-    source_name: 'Bank of Uganda',
+    source_name: 'Placeholder, to be updated from Bank of Uganda',
     source_url: 'https://www.bou.or.ug/',
   },
   assumed_customers_per_place: {
     key: 'assumed_customers_per_place',
     value: 1000,
     unit: 'customers',
-    source_name: 'Banange Model (range 500 to 2000)',
+    source_name: 'Banange Model (range 500 to 2000, our own assumption)',
     source_url: 'https://banange.kuppelabs.com/cost',
   },
   avg_kw_per_customer: {
     key: 'avg_kw_per_customer',
-    value: 0.18,
+    value: 0.17,
     unit: 'kW',
-    source_name: 'ERA Q2 2026 Distribution Statistics (Unverified placeholder)',
+    source_name: 'ERA Distribution Statistics Q2 2026 (sheets Energy Sales_kWh and Number of Customers), computed by Banange',
     source_url: 'https://www.era.go.ug/energy-sales-by-customer-category/',
   },
 };
