@@ -130,7 +130,7 @@ export async function GET() {
     const darkNowCount = activeDarkCells.length;
     const confirmedNowCount = activeDarkCells.filter((c) => c.confirmed).length;
 
-    // Fetch active or partial official notices that cannot be placed on the map
+    // Fetch active or partial official notices
     let unplacedNotices: Array<{
       service_area: string;
       areas_raw: string;
@@ -138,18 +138,41 @@ export async function GET() {
       status_raw: string;
     }> = [];
 
+    let officialPlacedPlaces: Array<{
+      id: string;
+      place_name: string;
+      lat: number;
+      lng: number;
+      service_area: string;
+      published_at: string;
+      status_raw: string;
+      status: 'active' | 'partial';
+      is_partial: boolean;
+    }> = [];
+
     try {
       const { getSupabaseServerClient } = await import('@/lib/supabase-server');
       const { processOfficialAlerts } = await import('@/lib/official-comparison');
       const supabase = getSupabaseServerClient();
       if (supabase) {
-        const { data: alertsData } = await supabase
-          .from('official_alerts')
-          .select('*')
-          .order('published_at', { ascending: false });
+        const [alertsRes, placesRes] = await Promise.all([
+          supabase.from('official_alerts').select('*').order('published_at', { ascending: false }),
+          supabase
+            .from('places')
+            .select('*')
+            .limit(20000)
+            .then(
+              (res) => res,
+              () => ({ data: null })
+            ),
+        ]);
+
+        const alertsData = alertsRes?.data;
+        const placesData = placesRes?.data || undefined;
 
         if (alertsData) {
-          const { processed } = processOfficialAlerts(alertsData, now);
+          const { processed } = processOfficialAlerts(alertsData, now, placesData);
+
           unplacedNotices = processed
             .filter(
               (p) =>
@@ -163,6 +186,31 @@ export async function GET() {
               published_at: p.alert.published_at,
               status_raw: p.alert.status_raw,
             }));
+
+          // Placed areas of active, non-stale notices for the amber layer
+          const seenPlacedKeys = new Set<string>();
+          for (const p of processed) {
+            if (!p.is_stale && (p.alert.status === 'active' || p.alert.status === 'partial')) {
+              const isPartial = p.alert.status === 'partial' || /partly/i.test(p.alert.status_raw);
+              for (const mp of p.matched_places) {
+                const dedupeKey = `${p.alert.id}_${mp.place_name}_${mp.lat.toFixed(4)}_${mp.lng.toFixed(4)}`;
+                if (!seenPlacedKeys.has(dedupeKey)) {
+                  seenPlacedKeys.add(dedupeKey);
+                  officialPlacedPlaces.push({
+                    id: dedupeKey,
+                    place_name: mp.place_name,
+                    lat: mp.lat,
+                    lng: mp.lng,
+                    service_area: p.alert.service_area,
+                    published_at: p.alert.published_at,
+                    status_raw: p.alert.status_raw,
+                    status: p.alert.status,
+                    is_partial: isPartial,
+                  });
+                }
+              }
+            }
+          }
         }
       }
     } catch {
@@ -180,6 +228,7 @@ export async function GET() {
         confirmed_now: confirmedNowCount,
       },
       unplaced_notices: unplacedNotices,
+      official_places: officialPlacedPlaces,
     };
 
     return NextResponse.json(body, {

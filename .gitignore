@@ -42,6 +42,12 @@ yarn-error.log*
 # scratch
 scratch/
 
+# osm dumps and cache
+*.osm
+*.pbf
+data/places.osm.json
+data/*.dump
+
 # vercel
 .vercel
 

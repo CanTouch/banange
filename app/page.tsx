@@ -33,6 +33,17 @@ function BanangeApp() {
   const [historyLabel, setHistoryLabel] = useState<string | null>(null);
   const [weeklyStats, setWeeklyStats] = useState<WeeklyAreaStat[]>([]);
   const [unplacedNotices, setUnplacedNotices] = useState<UnplacedOfficialNotice[]>([]);
+  const [officialPlaces, setOfficialPlaces] = useState<Array<{
+    id: string;
+    place_name: string;
+    lat: number;
+    lng: number;
+    service_area: string;
+    published_at: string;
+    status_raw: string;
+    status: 'active' | 'partial';
+    is_partial: boolean;
+  }>>([]);
   const [isDev, setIsDev] = useState(false);
   const [isDemo, setIsDemo] = useState(false);
   const [totals, setTotals] = useState<{ dark_now: number; confirmed_now: number } | null>(null);
@@ -116,6 +127,7 @@ function BanangeApp() {
       setWeeklyStats(data.areas || []);
       setTotals(data.totals || { dark_now: 0, confirmed_now: 0 });
       setUnplacedNotices(data.unplaced_notices || []);
+      setOfficialPlaces(data.official_places || []);
       setIsDev(Boolean(data.dev_mode));
       setIsDemo(Boolean(data.demo_mode));
       setErrorMessage(null);
@@ -411,7 +423,7 @@ function BanangeApp() {
       )}
 
       {/* Map View */}
-      <MapView cells={displayedCells} flyToLocation={flyTo} />
+      <MapView cells={displayedCells} officialPlaces={officialPlaces} flyToLocation={flyTo} />
 
       {/* No outages reported overlay when in historical mode with 0 outages */}
       {historicalCells !== null && darkCount === 0 && (
