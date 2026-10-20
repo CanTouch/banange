@@ -15,7 +15,11 @@ vi.mock('@/lib/supabase-server', () => {
       from: (table: string) => {
         if (table === 'official_alerts') {
           return {
-            select: () => Promise.resolve({ data: [...mockExistingRows], error: null }),
+            select: () => {
+              const res = Promise.resolve({ data: [...mockExistingRows], error: null }) as any;
+              res.order = () => Promise.resolve({ data: [...mockExistingRows], error: null });
+              return res;
+            },
             insert: (doc: any) => {
               const row = { id: `id-${mockInsertedRows.length + 1}`, ...doc };
               mockInsertedRows.push(row);
@@ -33,6 +37,11 @@ vi.mock('@/lib/supabase-server', () => {
                 },
               };
             },
+          };
+        }
+        if (table === 'outage_daily_summary') {
+          return {
+            upsert: () => Promise.resolve({ error: null }),
           };
         }
         if (table === 'official_alert_events') {

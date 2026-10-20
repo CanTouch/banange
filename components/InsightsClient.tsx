@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n';
 import { InsightsData } from '@/lib/insights';
+import { UedclComparisonSection } from './UedclComparisonSection';
 
 export function InsightsClient({ initialData }: { initialData?: InsightsData | null }) {
   const { language, setLanguage } = useI18n();
@@ -475,6 +476,9 @@ export function InsightsClient({ initialData }: { initialData?: InsightsData | n
                 </p>
               </div>
             </div>
+
+            {/* UEDCL Comparison Section */}
+            <UedclComparisonSection />
 
             {/* 2. Ranked List with thin red glow bars */}
             <div className="p-5 sm:p-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] backdrop-blur-md space-y-4">

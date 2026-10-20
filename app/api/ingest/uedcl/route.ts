@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
 import { getSupabaseServerClient } from '@/lib/supabase-server';
 import { parseUedclAlertsHtmlWithStats, ParsedUedclAlert } from '@/lib/uedcl';
+import { updateTodayOutageDailySummary } from '@/lib/daily-summary';
 
 export const dynamic = 'force-dynamic';
 
@@ -293,6 +294,9 @@ export async function POST(req: NextRequest) {
         dropped++;
       }
     }
+
+    // Update daily summary
+    await updateTodayOutageDailySummary(supabase, new Date(nowIso));
 
     return NextResponse.json({
       source,
